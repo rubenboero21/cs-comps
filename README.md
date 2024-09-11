@@ -1,2 +1,2 @@
 # cs-comps
-Repo for Jeff's security comps Fall 2024
+Ruben's repo for Jeff's security comps Fall 2024
