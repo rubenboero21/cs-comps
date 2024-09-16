@@ -60,8 +60,9 @@ Jeff's Questions:
 
 	Where did you get stuck? 
 		* I got stuck on level 11. Rotation is not something I ever thought about doing using terminal commands. I didn't read the instructions carefully, so I missed the Rot13 hint at first.
-		* I got stuck on level 12 with the decompression. I had to look up how to find the correct file compression type. I also had to look up how to extract/decompress each file type, which took some time. I also messed around a bit with xxd before I realized the .bin files.
+		* I got stuck on level 12 with the decompression. I had to look up how to find the correct file compression type. I also had to look up how to extract/decompress each file type, which took some time. I also messed around a bit with xxd before I realized the .bin files were present.
 
 	What was most frustrating?
 		* Manually looking through a list of files because I didn't know about the find command (completely my fault for not reading the OTW instructions)
 		* Not understanding why a command is not working how I think it should from the man page. E.g. I thought that uniq -u data.txt would work in level 8, but I actually needed to sort the data.txt lines before uniq -u would work properly
+		* Level 12 was frustrating. Having repeated compression types seems a little unnecessary. I was also a little frustrated after the 2nd gzip. I didn't see the .bin file name for a bit, so I wasn't sure how to proceed. 
