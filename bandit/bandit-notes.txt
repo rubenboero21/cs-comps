@@ -2,6 +2,7 @@ Level 0:
 How to connect to Over The Wire:
 	ssh bandit<level number>@bandit.labs.overthewire.org -p 2220
 	password is bandit<level number>
+To end ssh connection, use logout command to be returned to my terminal.
 
 Password for level 1 is in readme file (/home/bandit0/readme). I used the more command to read the file
 	ZjLjTmM6FvvyRnrb2rfNWOZOTa6ip5If
@@ -11,9 +12,56 @@ Password for level 2 is in the - file (/home/bandit1/-). I used more to access t
 	263JGJPfgU6LtdEvgfWU1XP5yac29mFx
 
 Level 2:
+Password for level 3 is in a file called 'spaces in this filename' located in the home directory. I typed more spaces, then used tab auto complete to auto fill the escape characters (bc of the spaces).
+	MNk8KNH3Usiio41PRUEoDFPqfxLPlSmx
 
+Level 3:
+I found the level 4 password by 'cd'-ing into the inhere directory, then used more and auto complete to read the ...Hiding-From-You file (which contains the password).
+	2WmrDFRmJIq3IPxneAaMGhap0pFhF3NJ
+
+Level 4:
+I used cd to get to the inhere directory. I used 'cat ./<filename>' to look through the files for the human readable one. The password is stored in the '-file07' file.
+	4oQYVPkxZOOEOO5pTW81FB8j8lxXGUQw
+
+Level 5:
+Cd into inhere directory. Used find command to look for all files that are 1033 bytes in size: 'find ./ -size 1033c'. Meaning, look through all files in the current directory, and return the ones that are 1033 bytes in size (luckily only 1 file met this requirement, so I didn't need to look for ones that met all 3 requirements listed). The password is found in 'inhere/maybehere07/.file2'.
+	HWasnPhtq9AVKe0dmk45nxy20cvUa6EG
+
+Level 6:
+I initially tried to use the following command: 'find / -user bandit7 -group bandit6 -size 33c'. (Look through all files, and return those with a given user, group, and size) This didn't work because it printed lots of permission denied errors. I looked up how to only return the non-permission denied items, and changed my command to the following: 'find / -user bandit7 -group bandit6 -size 33c 2>/dev/null' where 2>/dev/null suppresses the permission denied errors. The password is located in the following file: '/var/lib/dpkg/info/bandit7.password'. I used cat to view the contents.
+	morbNTDkSW6jIlUc0ymOdMaLnOlFVAaj
+
+Level 7:
+I used grep to search for millionth. Grep prints the whole line where the match occurs, and luckily the password is on the same line as millionth. I used the following command: 'grep 'millionth' data.txt'.
+	dfwvzFQi4mU0wfNbFOe9RoWskMLg7eEc
+
+Level 8:
+I used sort and uniq with the -u (unique) option (found from the man page) to find the only line that occurs once: 'sort data.txt | uniq -u'. I needed to look up why 'uniq -u data.txt did not work and found that the input needs to be sorted, so I used sort, and piped the output into uniq.
+	4CKMh1JI91bUIZZPXDqGanal4xvAg0JM
+
+Level 9:
+I used the string command to find the more human readable sections of data.txt (strings data.txt). I scrolled up a bit from the bottom of the output, and saw lots of '=' characters. I got a bit lucky finding the password here. I could have done a little better by piping the string output into grep, and searching for equal signs: 'strings data.txt | grep =='. This output reduces the number of lines to look through a lot.
+	FGUW5ilLVJrxX9kMYMmlN4MgbpfMiqey
+
+Level 10:
+I used the base64 command to decode (-d) the text in data.txt: 'base64 -d data.txt'. The decoded text makes it obvious what the password is.
+	dtR173fZKb0RRsDFSGsg2RWnpNVj3qRr
+
+Level 11:
+The linked helpful material on Rot13 has a section with a tr command to decrypt the text using the tr command: "tr 'A-Za-z' 'N-ZA-Mn-za-m'". I then used cat and a pipe to input data.txt into the tr function: "cat data.txt | tr 'A-Za-z' 'N-ZA-Mn-za-m'".
+	7x16WNeHIi5YkIhWsfFIqoognUTyj9Q4
+
+Level 12:
+I created a directory within tmp (mktemp -d) and copied (cp) data.txt into it. I reverted the hexdump using xdd and stored it in a file called compressed_data: 'xdd -r data.txt compressed_data'. This is still compressed, so I use xdd to show the hexadecimal to find the type of file compression used (https://en.wikipedia.org/wiki/Hex_dump). It begins with 1F 8B, which is gzip, so we rename the output to have the .gz suffix (using mv) and use gzip to decompress: 'gzip -d compressed_data.gz'. The output of the gzip is still compressed, so we again look for the compression type. Using xxd, we see that the compression type is bzip2 (42 5A 68), so we rename the file to have the correct suffix: compressed_data.bz2. Next, we use bzip2 to decompress the file again: 'bzip2 -d compressed_data.bz2'. This reveals a gzip file (1F 8B prefix), so we use the same gzip command as above to decompress. If we use xxd to view this decompressed file, we see a data5.bin file name at the head of the file. We can extract a .bin file using the tar command to extract it after renaming the file to have the .tar suffix: 'tar -xf compressed_data.tar'. Using xxd to view data5.bin, this reveals another .bin file (data6.bin). So we repeat the previous step: 'tar -xf data5.bin'. Using xxd to read data6.bin, we see it is compressed with bzip2 (from the 42 5A 68 prefix), so we decompress using bzip2: 'bzip2 -d data6.bin'. This results in a file called datfa6.bin.out that has data8.bin in it (viewed with xdd), so we again use tar to extract the .bin: 'tar -xf data6.bin.out'. Viewing data8.bin with xxd we see it is compressed with gzip, so we rename the file to have the .gz suffix and decompress using gzip: 'gzip -d data8.gz'. Finally, this reveals a file called data8, which is fully decompressed, and contains the password. Last, I removed the tmp directory I created.
+	FO5dwFsc0cbaIiH0h8J2eUks2vdTDwAn
 
 Jeff's Questions:
 	What was most interesting?
+
 	Where did you get stuck? 
+		* I got stuck on level 11. Rotation is not something I ever thought about doing using terminal commands. I didn't read the instructions carefully, so I missed the Rot13 hint at first.
+		* I got stuck on level 12 with the decompression. I had to look up how to find the correct file compression type. I also had to look up how to extract/decompress each file type, which took some time. I also messed around a bit with xxd before I realized the .bin files.
+
 	What was most frustrating?
+		* Manually looking through a list of files because I didn't know about the find command (completely my fault for not reading the OTW instructions)
+		* Not understanding why a command is not working how I think it should from the man page. E.g. I thought that uniq -u data.txt would work in level 8, but I actually needed to sort the data.txt lines before uniq -u would work properly
