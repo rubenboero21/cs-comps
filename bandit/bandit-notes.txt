@@ -3,7 +3,15 @@ How to connect to Over The Wire:
 	ssh bandit<level number>@bandit.labs.overthewire.org -p 2220
 	password is bandit<level number>
 
+Password for level 1 is in readme file (/home/bandit0/readme). I used the more command to read the file
+	ZjLjTmM6FvvyRnrb2rfNWOZOTa6ip5If
+
 Level 1:
+Password for level 2 is in the - file (/home/bandit1/-). I used more to access the file.
+	263JGJPfgU6LtdEvgfWU1XP5yac29mFx
+
+Level 2:
+
 
 Jeff's Questions:
 	What was most interesting?
