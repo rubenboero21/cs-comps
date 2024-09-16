@@ -1,0 +1,11 @@
+Level 0:
+How to connect to Over The Wire:
+	ssh bandit<level number>@bandit.labs.overthewire.org -p 2220
+	password is bandit<level number>
+
+Level 1:
+
+Jeff's Questions:
+	What was most interesting?
+	Where did you get stuck? 
+	What was most frustrating?
