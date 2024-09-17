@@ -136,7 +136,7 @@ Jeff's Questions:
 
 	Where did you get stuck? 
 		* I got stuck on level 11. Rotation is not something I ever thought about doing using terminal commands. I didn't read the instructions carefully, so I missed the Rot13 hint at first.
-		* I got stuck on level 12 with the decompression. I had to look up how to find the correct file compression type. I also had to look up how to extract/decompress each file type, which took some time. I also messed around a bit with xxd before I realized the .bin files were present.
+		* I got stuck on level 12 with the decompression. I had to look up how to find the correct file compression type. I also had to look up how to extract/decompress each file type, which took some time. I also messed around a bit with xxd before I realized the .bin files were present. I realized later that I could have just used the file command and have it tell me the compression type instead of needing to do it manually with xxd. 
 
 	What was most frustrating?
 		* Manually looking through a list of files because I didn't know about the find command (completely my fault for not reading the OTW instructions)
