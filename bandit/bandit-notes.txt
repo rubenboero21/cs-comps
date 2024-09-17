@@ -126,7 +126,7 @@ To give a binary file suid permission: 'chmod u + s <file name>'. Suid allows th
 Important lesson: learn what suid is and how it works/lets us do
 
 Level 20:
-We can have nc listen on a port, and run a command when the port is connected to: 'echo -n <password from previous level> | nc -l <unused port> &'. The command that we pipe into nc (echo) will be executed when the port is connected to. The -n tag removes the newline character from the echo (needed for the password to match). The & makes nc continue to listen in the background so we can run more commands. Once nc is listening on a port, we can run the binary and provide it the port that nc is listening on. Once the binary connects to the port, nc will echo the password, the binary will reach the echo'd password, and the binary will then provide us with the password for the next level.
+We can have nc listen on a port, and run a command when the port is connected to: 'echo -n <password from previous level> | nc -l <unused port> &'. The command that we pipe into nc (echo) will be executed when the port is connected to. The -n tag removes the newline character from the echo (needed for the password to match). The & makes nc continue to listen in the background so we can run more commands. Once nc is listening on a port, we can run the binary and provide it the port that nc is listening on. Once the binary connects to the port, nc will echo the password, the binary will read the echo'd password, and the binary will then provide us with the password for the next level.
 	EeoULMCra2q0dSkYj561DX7s1CpBuOBt
 
 
