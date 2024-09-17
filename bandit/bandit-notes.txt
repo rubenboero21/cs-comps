@@ -141,4 +141,4 @@ Jeff's Questions:
 	What was most frustrating?
 		* Manually looking through a list of files because I didn't know about the find command (completely my fault for not reading the OTW instructions)
 		* Not understanding why a command is not working how I think it should from the man page. E.g. I thought that uniq -u data.txt would work in level 8, but I actually needed to sort the data.txt lines before uniq -u would work properly
-		* Level 12 was frustrating. Having repeated compression types seems a little unnecessary. I was also a little frustrated after the 2nd gzip. I didn't see the .bin file name for a bit, so I wasn't sure how to proceed. 
+		* Level 12 was frustrating. Having repeated compression types seems a little unnecessary. I was also a little frustrated after the 2nd gzip. I didn't see the .bin file name for a bit, so I wasn't sure how to proceed. Again, this could have been avoided if I was using the file command.
