@@ -4,72 +4,129 @@ How to connect to Over The Wire:
 	password is bandit<level number>
 To end ssh connection, use logout command to be returned to my terminal.
 
-Password for level 1 is in readme file (/home/bandit0/readme). I used the more command to read the file
+Password for level 1 is in readme file (/home/bandit0/readme). I used the more command to read the file.
 	ZjLjTmM6FvvyRnrb2rfNWOZOTa6ip5If
+
+Important lesson: learn command to read a file.
 
 Level 1:
 Password for level 2 is in the - file (/home/bandit1/-). I used more to access the file.
 	263JGJPfgU6LtdEvgfWU1XP5yac29mFx
 
+Important lesson: learn how to open a strangely named file.
+
 Level 2:
 Password for level 3 is in a file called 'spaces in this filename' located in the home directory. I typed more spaces, then used tab auto complete to auto fill the escape characters (bc of the spaces).
 	MNk8KNH3Usiio41PRUEoDFPqfxLPlSmx
+
+Important lesson: learn how to open a file named in a different strange way.
 
 Level 3:
 I found the level 4 password by 'cd'-ing into the inhere directory, then used more and auto complete to read the ...Hiding-From-You file (which contains the password).
 	2WmrDFRmJIq3IPxneAaMGhap0pFhF3NJ
 
+Important lesson: learn to navigate directories
+
 Level 4:
 I used cd to get to the inhere directory. I used 'cat ./<filename>' to look through the files for the human readable one. The password is stored in the '-file07' file.
 	4oQYVPkxZOOEOO5pTW81FB8j8lxXGUQw
+
+Important lesson: learn how to efficiently look through many files for one that we want
 
 Level 5:
 Cd into inhere directory. Used find command to look for all files that are 1033 bytes in size: 'find ./ -size 1033c'. Meaning, look through all files in the current directory, and return the ones that are 1033 bytes in size (luckily only 1 file met this requirement, so I didn't need to look for ones that met all 3 requirements listed). The password is found in 'inhere/maybehere07/.file2'.
 	HWasnPhtq9AVKe0dmk45nxy20cvUa6EG
 
+Important lesson: learn how to efficiently find a file that we want (using find command)
+
 Level 6:
 I initially tried to use the following command: 'find / -user bandit7 -group bandit6 -size 33c'. (Look through all files, and return those with a given user, group, and size) This didn't work because it printed lots of permission denied errors. I looked up how to only return the non-permission denied items, and changed my command to the following: 'find / -user bandit7 -group bandit6 -size 33c 2>/dev/null' where 2>/dev/null suppresses the permission denied errors. The password is located in the following file: '/var/lib/dpkg/info/bandit7.password'. I used cat to view the contents.
 	morbNTDkSW6jIlUc0ymOdMaLnOlFVAaj
+
+Important lesson: learn how to efficiently find a file that we want (using find command)
 
 Level 7:
 I used grep to search for millionth. Grep prints the whole line where the match occurs, and luckily the password is on the same line as millionth. I used the following command: 'grep 'millionth' data.txt'.
 	dfwvzFQi4mU0wfNbFOe9RoWskMLg7eEc
 
+Important lesson: learn how to search within a file for a relevant section
+
 Level 8:
 I used sort and uniq with the -u (unique) option (found from the man page) to find the only line that occurs once: 'sort data.txt | uniq -u'. I needed to look up why 'uniq -u data.txt did not work and found that the input needs to be sorted, so I used sort, and piped the output into uniq.
 	4CKMh1JI91bUIZZPXDqGanal4xvAg0JM
+
+Important lesson: learn how to search within a file for a relevant section
 
 Level 9:
 I used the string command to find the more human readable sections of data.txt (strings data.txt). I scrolled up a bit from the bottom of the output, and saw lots of '=' characters. I got a bit lucky finding the password here. I could have done a little better by piping the string output into grep, and searching for equal signs: 'strings data.txt | grep =='. This output reduces the number of lines to look through a lot.
 	FGUW5ilLVJrxX9kMYMmlN4MgbpfMiqey
 
+Important lesson: learn how to search within a file for a relevant section
+
 Level 10:
 I used the base64 command to decode (-d) the text in data.txt: 'base64 -d data.txt'. The decoded text makes it obvious what the password is.
 	dtR173fZKb0RRsDFSGsg2RWnpNVj3qRr
+
+Important lesson: learn how to decode base64 encoded data
 
 Level 11:
 The linked helpful material on Rot13 has a section with a tr command to decrypt the text using the tr command: "tr 'A-Za-z' 'N-ZA-Mn-za-m'". I then used cat and a pipe to input data.txt into the tr function: "cat data.txt | tr 'A-Za-z' 'N-ZA-Mn-za-m'".
 	7x16WNeHIi5YkIhWsfFIqoognUTyj9Q4
 
+Important lesson: learn how to manipulate text 
+
 Level 12:
 I created a directory within tmp (mktemp -d) and copied (cp) data.txt into it. I reverted the hexdump using xdd and stored it in a file called compressed_data: 'xdd -r data.txt compressed_data'. This is still compressed, so I use xdd to show the hexadecimal to find the type of file compression used (https://en.wikipedia.org/wiki/List_of_file_signatures). It begins with 1F 8B, which is gzip, so we rename the output to have the .gz suffix (using mv) and use gzip to decompress: 'gzip -d compressed_data.gz'. The output of the gzip is still compressed, so we again look for the compression type. Using xxd, we see that the compression type is bzip2 (42 5A 68), so we rename the file to have the correct suffix: compressed_data.bz2. Next, we use bzip2 to decompress the file again: 'bzip2 -d compressed_data.bz2'. This reveals a gzip file (1F 8B prefix), so we use the same gzip command as above to decompress. If we use xxd to view this decompressed file, we see a data5.bin file name at the head of the file. We can extract a .bin file using the tar command to extract it after renaming the file to have the .tar suffix: 'tar -xf compressed_data.tar'. Using xxd to view data5.bin, this reveals another .bin file (data6.bin). So we repeat the previous step: 'tar -xf data5.bin'. Using xxd to read data6.bin, we see it is compressed with bzip2 (from the 42 5A 68 prefix), so we decompress using bzip2: 'bzip2 -d data6.bin'. This results in a file called datfa6.bin.out that has data8.bin in it (viewed with xdd), so we again use tar to extract the .bin: 'tar -xf data6.bin.out'. Viewing data8.bin with xxd we see it is compressed with gzip, so we rename the file to have the .gz suffix and decompress using gzip: 'gzip -d data8.gz'. Finally, this reveals a file called data8, which is fully decompressed, and contains the password. Last, I removed the tmp directory I created.
 	FO5dwFsc0cbaIiH0h8J2eUks2vdTDwAn
+
+Important lesson: learn how to decompress files and determine which decompression type is used, and how to rename files with mv
 
 Level 13:
 The home directory contains the private RSA key for bandit14 stored in a file called sshkey.private. With this key we can login to bandit14 via ssh using the -i option to pass in the RSA private key. I used the following command to login to bandit14: 'ssh bandit14@bandit.labs.overthewire.org -i sshkey.private -p 2220'. Once logged in as bandit14, we have permission to view the password stored at /etc/bandit_pass/bandit14.
 	MU4VWeTyJk8ROof1qqmcBPaLh7lDCPvS
 
+Important lesson: learn how to login with ssh using a RSA private key + understand permissions
+
 Level 14:
 I used netcat (nc) to connect to port 30000 on localhost (as per the instructions): 'nc localhost 30000'. Then I sent over bandit14's password from the previous level (MU4VWeTyJk8ROof1qqmcBPaLh7lDCPvS), and received the password for the next level. 
 	8xCjnmgoKbGLhHFAZlGE5Tmu4M2tKJQo
+
+Important lesson: learn how to make a connection to a specific port
 
 Level 15:
 I use openssl s_client to make a connection to port 30001 on localhost: 'openssl s_client -connect localhost:30001'. Once the connection is open, I send the password for the current level (8xCjnmgoKbGLhHFAZlGE5Tmu4M2tKJQo) and receive the password for the next level in return. 
 	kSkvUpMQ7lBYyCM4GBPvCvT1BfWRy0Dx
 
+Important lesson: learn how to make an ssl connection to a specific port
+
 Level 16:
 I used nmap to find a list of open ports in the given range: 'nmap localhost -p 31000-32000'. I tried to use 'nmap -sV localhost -p 31000-32000' to find more detailed information about the open ports, but the scan didn't finish (maybe it would have if I was more patient), even when running on a single port. Because I didn't have more detailed info about the ports, I just tried them all until I found the correct one (the only one that doesn't echo). I made a connection to the port using ncat (openssl was giving a KEYUPDATE error that I couldn't solve): 'ncat --ssl localhost 31790'. I then gave the password for this level (kSkvUpMQ7lBYyCM4GBPvCvT1BfWRy0Dx) and received the RSA private key. I created a directory inside of tmp, and created a file to store the private key called private.key. I then used chmod to make the file not accessible by everyone (chmod 700) to fix an error that occurs when trying to ssh with the key available to everyone. Then, use the same ssh -i command as earlier to login as bandit17: 'ssh bandit17@bandit.labs.overthewire.org -i priv.key -p 2220'. Once logged in as bandit17, I have permission to view the password stored in /etc/bandit_pass/bandit17.
 	EReVavePLFHtFlFsjn3hyzMlvSuSAcRD
+
+Important lesson: learn how to find open ports
+
+Level 17:
+I used the diff command to return the only line that has been changed: 'diff passwords.new passwords.old'. The password is the one stored in passwords.new.
+	x2gLTTjFwMOhQ8oWNbMN362QKxfRqGlO
+
+Important lesson: learn how to use diff
+
+Level 18:
+We can run a command through ssh by placing the command at the end of the ssh command: 'ssh bandit18@bandit.labs.overthewire.org -p 2220 cat readme'. This allows us to view contents of the readme before we are logged off. (I also used ssh to execute an ls command so I knew what to cat.)
+	cGWpMaKXVwDUNgPAVJbWYuGHVn9zl3j8
+
+Important lesson: learn that ssh can be used to execute commands
+
+Level 19:
+To give a binary file suid permission: 'chmod u + s <file name>'. Suid allows the binary file to be executed as the owner of the file, not as the user executing it. If we do: 'ls -l' we can see that bandit20-do is owned by bandit20, but executable by bandit 19. This means that we can use the binary to access bandit20's password: './bandit20-do cat /etc/bandit_pass/bandit20'.
+	0qXahG8ZjOVMN9Ghs7iOWsCfZyXOUbYO
+	
+Important lesson: learn what suid is and how it works/lets us do
+
+Level 20:
+We can have nc listen on a port, and run a command when the port is connected to: 'echo -n <password from previous level> | nc -l <unused port> &'. The command that we pipe into nc (echo) will be executed when the port is connected to. The -n tag removes the newline character from the echo (needed for the password to match). The & makes nc continue to listen in the background so we can run more commands. Once nc is listening on a port, we can run the binary and provide it the port that nc is listening on. Once the binary connects to the port, nc will echo the password, the binary will reach the echo'd password, and the binary will then provide us with the password for the next level.
+	EeoULMCra2q0dSkYj561DX7s1CpBuOBt
+
 
 Jeff's Questions:
 	What was most interesting?
