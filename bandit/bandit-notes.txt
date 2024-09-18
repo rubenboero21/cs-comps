@@ -130,13 +130,69 @@ We can have nc listen on a port, and run a command when the port is connected to
 	EeoULMCra2q0dSkYj561DX7s1CpBuOBt
 
 
+Important lesson: how to use net cat to listen on a port and run a command when port is accessed
+
+Level 21:
+I looked in the specified directory and read the cronjob_bandit22 file. The cron file shows that a file is being referenced at location /usr/bin/cronjob_bandit22.sh. I read the contents of the cronjob_bandit22.sh file and saw that a file was being created at location /tmp/t7O6lds9S0RqQh9aMcz6ShpAoZKF7fgv, so I read the contents of the file, and found the password for level 22.
+	tRae0UfB9v0UzbCdn9cY0gQnds9GF58Q
+
+Important lesson: how to read cron config files
+
+Level 22:
+I did the same as above except I read the cronjob_bandit23 file and then read the referenced .sh file. This script is storing the password in a file where the name is the md5 hash of the string 'I am user bandit23'. I know bandit23 is the name referenced because the cron config file shows that bandit23 is the user who executes the script. The password is stored in /tmp/8ca319486bfbbc3663ea0fbe81326349. 
+	0Zf11ioIjMVN551jX3CmStKLYqjk54Ga
+
+Important lesson: understanding which user executes a cron task and bash scripting
+
+Level 23:
+Same as the previous 2 levels. There is a scheduled cron task executed by bandit24. In this level, bandit24 executes a script that executes and deletes scripts in /var/spool/$myname/foo where $myname = bandit24. We can then write a bash script that outputs bandit24's password to a file (since bandit24 is the user executing these scripts). To do this we need to place it in the correct directory, and wait for cron to have bandit24 execute the script. Then all we need to do is read the file that we had out script output the password to. I made the tmp folder and my script readable and executable by everyone (since bandit24 will need access): 'chmod 777 level23.sh ' & 'chmod 777 /tmp/tmp.DUAKUGeXp3'.
+
+My bash script called level23.sh:
+#!/bin/bash
+cat /etc/bandit_pass/bandit24 >> /tmp/tmp.DUAKUGeXp3/passwd
+	* The file location is a tmp file with a randomly generated name. 
+
+	gb8KRRCsshuZXI0tUuR6ypOFjiZbf3G8
+
+Important lesson: writing a basic bash script & more practice reading cron and bash
+
+Level 24:
+I wrote a bash script, gen_pins.sh, to brute force all of the possible pins and store them in a text file:
+#!/bin/bash
+
+for i in {0000..9999}
+do
+	echo gb8KRRCsshuZXI0tUuR6ypOFjiZbf3G8 $i >> pins.txt
+done
+
+I needed to make the script executable: 'chmod +x gen_pins.sh'
+
+I then sent each line of pins.txt to the specified nc port and recorded the response I got with that pin: 'cat pins.txt | nc localhost 30002 >> output.txt'. Next, I checked the output file for the password. For me, the last line in the output file contained the password, but I could have used grep and returned the only line that doesn't contain 'Wrong!' using the -v tag.
+	iCi86ttT4KSNe1armKiwbQNmB3YJP3q4
+
+Important lessons: more practice with bash scripting and connecting to ports via nc
+
+Level 25:
+I needed to look this one up. We need to make our terminal window small so that more cannot print out all of the text.txt file at once. The non-bash shell will print out the text.txt file, so by ssh-ing in to bandit26 ('ssh -i bandit26.sshkey bandit26@localhost -p 2220') with a small window, we get the special mode of more that we need to break out of the non-bash shell. In this mode, we have access to commands that let us break out of the shell. If I press 'v' it will open vim. In vim, :set shell=/bin/bash, then :shell. Now we have a regular shell, and we can get bandit26's password: 'cat /etc/bandit_pass/bandit26'.
+	s0773xxkk0MXfdqOfPRVr9L3jJBUOgCZ
+
+Important lessons: thinking outside the box
+
+Level 26:
+From within the bandit26 shell we got in level 25, we can use the bandit27-do to run a command as bandit27, so we can run the following as bandit26 to get bandit27's password: './bandit27-do cat /etc/bandit_pass/bandit27'.
+	upsNCc7vzaRDx6oZC6GiR6ERwe1MowGB
+
+
 Jeff's Questions:
 	What was most interesting?
 		* I enjoyed using nmap to scan the open ports.
+		* I also enjoyed using nc to listen and echo the passwords in level 20.
+		* I enjoyed the weirdness of level 25 with the window sizing thing. It was a fun ride.
 
 	Where did you get stuck? 
 		* I got stuck on level 11. Rotation is not something I ever thought about doing using terminal commands. I didn't read the instructions carefully, so I missed the Rot13 hint at first.
 		* I got stuck on level 12 with the decompression. I had to look up how to find the correct file compression type. I also had to look up how to extract/decompress each file type, which took some time. I also messed around a bit with xxd before I realized the .bin files were present. I realized later that I could have just used the file command and have it tell me the compression type instead of needing to do it manually with xxd. 
+		* I was completely lost on level 25. I never would have thought to make the terminal size small in order to break out of the shell.
 
 	What was most frustrating?
 		* Manually looking through a list of files because I didn't know about the find command (completely my fault for not reading the OTW instructions)
