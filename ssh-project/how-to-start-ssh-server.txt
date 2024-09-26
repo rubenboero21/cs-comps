@@ -1,0 +1,22 @@
+On Kali:
+Start the server:
+	sudo systemctl start ssh
+	
+Check server status:
+	sudo systemctl status ssh
+
+Stop the server:
+	sudo systemctl stop ssh
+
+Find the IP address:
+	ip a
+	look under etho0 header > inet > IP address
+		For me IP was: 192.168.64.6
+
+On Mac:
+Connect to server:
+	ssh kali@<IP address>
+	
+Disconnect from server:
+	exit 
+	logout
