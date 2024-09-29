@@ -1,0 +1,11 @@
+SSH Questions:
+
+1) We traced through most of the process outlined by RFC using Wireshar, but how should we start to create our own client?
+	- Find open source code for ssh client?
+	- We can't see everything through Wireshark (some stuff is computer by client/server and not sent between the 2). Is this something that we need to see (source code), or can we just try it on our own?
+
+2) Is the DH key exchange part of the key exchange?
+	- Is it normal that we don't see the SSH_MSG_NEWKEYS message until after DH exchange?
+
+3) Why are we seeing an error in our DH exchange?
+	- The connection works, so is the error fine to ignore?
