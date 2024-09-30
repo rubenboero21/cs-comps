@@ -6,6 +6,7 @@ SSH Questions:
 
 2) What does it mean that SSH runs on top of TCP?
 	- Does it just mean that TCP is the way that the 2 machines communicate to facilitate ssh?
+	* TCP ensures packets arrive in order of them being sent + uncorrupted
 
 3) Is the DH key exchange part of the key exchange?
 	- Is it normal that we don't see the SSH_MSG_NEWKEYS message until after DH exchange?
@@ -16,9 +17,12 @@ SSH Questions:
 
 5) How is the information from key exchange used to make DH secure (prevent adversary in the middle attack)?
 	- We assume the info is encrypted somehow, but we are not sure how.
+	* IT'S NOT -- FINGERPRINT/CHALLENGE IS USED BUT WE DON'T KNOW HOW IT WORKS OR HOW 		EFFECTIVE IT IS
 
 6) What is the purpose of the SSHv2 packets that have no body?
 	- e.g. line 14, 19, etc. of Wireshark capture
+	* They might be the encrypted communications that we can't read. (The empty messages 
+	appear after DH is completed, so encryption is available.)
 
 7) Why are we not seeing a service request packet after the key exchange like the RFC (section 10) says we should?
 
