@@ -9,3 +9,8 @@ SSH Questions:
 
 3) Why are we seeing an error in our DH exchange?
 	- The connection works, so is the error fine to ignore?
+
+4) MAYBE irrelevant. I was curious to see what would happen if I used nc to connect to the ssh server running on Kali. When I connected, server sent what looks like Server Protocol packet. BUT when we used Wireshark, the client initiated each step. Is this just because I was interacting with the sshd in a non-standard way, or something that we need to handle?
+
+5) We've looked through some source code for ssh clients. These projects are aiming to improve upon the standard ssh in some ways, so they often are large projects and we are having some trouble finding relevant code. 
+	- Suggestions on how to find relevant code in a complicated/large project?
