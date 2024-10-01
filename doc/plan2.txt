@@ -7,6 +7,8 @@ Learning goals:
    1. Is there a way we can see what the values are and try to carry out the process by hand and compare our values to real values?
 5. What happens after DH is completed?
    1. We can’t use Wireshark to view the encrypted communications, so we don’t know if there are additional steps we need to establish a connection to the server
+6. Learn exactly how the host fingerprint is created from public key
+7. Learn exactly what gets stored in known_hosts
 
 Stretch goals:
 1. In addition to stretch goals from plan 1:
