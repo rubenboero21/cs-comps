@@ -1,0 +1,29 @@
+Learning goals:
+1. The goals from plan1 still apply. In addition, we have added the following learning goals:
+2. Understand how ssh fingerprints work/are used
+3. Learn how the client verifies the host’s signature during the DH exchange
+   1. Does the client use the fingerprint the server initially sends when connecting for the 1st time, or some other method? RFC 4253 is not specific about how the client should verify the server’s signature is legit
+4. Learn specifics of DH exchange 
+   1. Is there a way we can see what the values are and try to carry out the process by hand and compare our values to real values?
+5. What happens after DH is completed?
+   1. We can’t use Wireshark to view the encrypted communications, so we don’t know if there are additional steps we need to establish a connection to the server
+
+Stretch goals:
+1. In addition to stretch goals from plan 1:
+2. Learn rust & write client in rust
+
+Schedule of development:
+* Week 3: 
+   - Work out how fingerprints are used to verify the server & identify any weaknesses
+   - Learn exactly what the server/client challenge to authenticate entails AND when/how it is carried out
+   - Become more familiar with exactly how the DH exchange works
+   - Make sure that we understand how encryption works once DH is complete
+      * We have the list of all encryption algorithms from the key exchange, could try and an algorithm by hand to make sure we know what is going on
+   - Learn more about whether TCP handshake is something we need to handle?
+      * What tools can we use to perform the handshake for us?
+   - Find tools that we can use to carry out the steps in the ssh exchange that are not relevant to our project
+* Week 4:
+   - Begin coding all steps up to and including the DH exchange
+      * Find any tools that we may have missed but still need
+* Week 9:
+   - Poster and presentation
