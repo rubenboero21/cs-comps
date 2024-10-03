@@ -1,0 +1,40 @@
+SSH Questions:
+
+1) We traced through most of the process outlined by RFC using Wireshar, but how should we start to create our own client?
+	- Find open source code for ssh client?
+	- We can't see everything through Wireshark (some stuff is computer by client/server and not sent between the 2). Is this something that we need to see (source code), or can we just try it on our own?
+
+2) What does it mean that SSH runs on top of TCP?
+	- Does it just mean that TCP is the way that the 2 machines communicate to facilitate ssh?
+	* TCP ensures packets arrive in order of them being sent + uncorrupted
+
+3) Is the DH key exchange part of the key exchange?
+	- Is it normal that we don't see the SSH_MSG_NEWKEYS message until after DH exchange?
+	- SSH_MSG_NEWKEYS is in line 13 of Wireshark capture
+
+4) Why are we seeing an error in our DH exchange?
+	- The connection works, so is the error fine to ignore?
+
+5) How is the information from key exchange used to make DH secure (prevent adversary in the middle attack)?
+	- We assume the info is encrypted somehow, but we are not sure how.
+	* IT'S NOT -- FINGERPRINT/CHALLENGE IS USED BUT WE DON'T KNOW HOW IT WORKS OR HOW 		EFFECTIVE IT IS
+
+6) What is the purpose of the SSHv2 packets that have no body?
+	- e.g. line 14, 19, etc. of Wireshark capture
+	* They might be the encrypted communications that we can't read. (The empty messages 
+	appear after DH is completed, so encryption is available.)
+
+7) Why are we not seeing a service request packet after the key exchange like the RFC (section 10) says we should?
+
+8) Which low level operations do we need to handle ourselves? 
+	- Do we need to handle packet creation? 
+		* openssh source code does it all itself, but I imagine there is a tool that 			does it for us
+	- Do we need to carry out the TCP handshake?
+		* Does this count as part of the ssh setup?
+		* Again, I'm sure there are tools that would do this for us, do we want to use 			those tools
+
+9) MAYBE irrelevant. I was curious to see what would happen if I used nc to connect to the ssh server running on Kali. When I connected, server sent what looks like Server Protocol packet. BUT when we used Wireshark, the client initiated each step. Is this just because I was interacting with the sshd in a non-standard way, or something that we need to handle?
+
+10) We've looked through some source code for ssh clients. These projects are aiming to improve upon the standard ssh in some ways, so they often are large projects and we are having some trouble finding relevant code. 
+	- Suggestions on how to find relevant code in a complicated/large project?
+
