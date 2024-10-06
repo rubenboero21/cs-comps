@@ -48,15 +48,28 @@ void sendKexInit (int sock) {
     unsigned char cookie[16];
     generateRandomCookie(cookie);
 
-    buffer[0] = SSH_MSG_KEXINIT;
-    memcpy(buffer + 1, cookie, 16);
+    // this is hardcoded, just trying to get it to work
+    uint32_t packetLen = 24;
+    // this adds in 18 00 00 00, but on valid wireshark packet, its 00 00 00 18 (endian-ness seems wrong)
+    memcpy(buffer, &packetLen, sizeof(packetLen)); // packet len = 24
+    buffer[4] = 6; // padding len = 6
 
-    send(sock, buffer, 17, 0);
+    buffer[5] = SSH_MSG_KEXINIT;
+    memcpy(buffer + 6, cookie, 16); //
+    memset(buffer + 22, 0, 2);
+
+    // printing out packet for debugging
+    for (int i = 0; i < 24; i++) {
+        printf("%x ",  buffer[i]);
+    }
+    printf("\n");
+    
+    send(sock, buffer, 24, 0);
     
     ssize_t bytes_recieved = recv(sock, buffer, BUFFER_SIZE, 0);
     
     if (bytes_recieved > 0) {
-        printf("response: %s", buffer);
+        printf("response: %s\n", buffer);
     } else {
         printf("No server response recieved :(\n");
     }
