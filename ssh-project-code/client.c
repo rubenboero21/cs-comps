@@ -50,7 +50,7 @@ void sendKexInit (int sock) {
 
     // this is hardcoded, just trying to get it to work
     uint32_t packetLen = 24;
-    // this adds in 18 00 00 00, but on valid wireshark packet, its 00 00 00 18 (endian-ness seems wrong)
+    packetLen = htonl(packetLen); // fix endian-ness
     memcpy(buffer, &packetLen, sizeof(packetLen)); // packet len = 24
     buffer[4] = 6; // padding len = 6
 
