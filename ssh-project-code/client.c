@@ -62,6 +62,7 @@ void start_client() {
 
     sendProtocol(sock, buffer);
 
+    // maybe use malloc to make it more clear what is going on - allocating 16 bytes
     unsigned char cookie[16];
     generateRandomCookie(cookie);
 
