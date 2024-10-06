@@ -12,9 +12,9 @@
 #define SSH_MSG_KEXINIT 20
 
 // should add error codes later
-void sendProtocol(int sock, char *buffer) {
-    // clear the buffer before anything is written into it
-    memset(buffer, 0, BUFFER_SIZE);
+void sendProtocol(int sock) {
+    unsigned char buffer[BUFFER_SIZE];
+    memset(buffer, 0, BUFFER_SIZE);  // Clear the buffer
 
     // send client protocol to server
     char *protocol = "SSH-2.0-mySSH\r\n";
@@ -40,10 +40,31 @@ void generateRandomCookie(unsigned char *cookie) {
     }
 }
 
+// DOES NOT WORK - WE ARE NOT FOLLOWING BINARY PACKET PROTOCOL - were hoping that send() would handle it for us
+void sendKexInit (int sock) {
+    unsigned char buffer[BUFFER_SIZE];
+    memset(buffer, 0, BUFFER_SIZE);  // Clear the buffer
+
+    unsigned char cookie[16];
+    generateRandomCookie(cookie);
+
+    buffer[0] = SSH_MSG_KEXINIT;
+    memcpy(buffer + 1, cookie, 16);
+
+    send(sock, buffer, 17, 0);
+    
+    ssize_t bytes_recieved = recv(sock, buffer, BUFFER_SIZE, 0);
+    
+    if (bytes_recieved > 0) {
+        printf("response: %s", buffer);
+    } else {
+        printf("No server response recieved :(\n");
+    }
+}
+
 void start_client() {
     struct sockaddr_in address;
     int sock = 0;
-    char buffer[BUFFER_SIZE];
 
     sock = socket(AF_INET, SOCK_STREAM, 0);
 
@@ -60,7 +81,7 @@ void start_client() {
         printf("no connection\n");
     }
 
-    sendProtocol(sock, buffer);
+    sendProtocol(sock);
 
     // maybe use malloc to make it more clear what is going on - allocating 16 bytes
     unsigned char cookie[16];
@@ -71,6 +92,8 @@ void start_client() {
         printf("%02x ", cookie[i]);
     }
     printf("\n");
+
+    sendKexInit(sock);
 
     close(sock);
 }
