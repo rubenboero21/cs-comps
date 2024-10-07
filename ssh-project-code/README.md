@@ -8,6 +8,7 @@ client.c is a simple ssh client that runs on the command line.
 
 
 **How to use the Makefile:**
+
 Just compile the code:
 ```makefile
 make compile
