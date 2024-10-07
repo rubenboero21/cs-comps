@@ -1,54 +1,73 @@
-﻿Liam and Ruben
+Liam and Ruben
 * A short description of the project. I'm thinking 1-4 sentences, but whatever works for you.
-   * We will create an SSH client capable of connecting to a remote (host) machine 
+   - We will create an SSH client capable of connecting to a remote (host) machine 
+
 * A short list of learning goals--what do you want to end up understanding that you don't understand yet?
-   * Exactly where/when the server sends its public key to the client for authentication/verification
-   * Exactly when/how the client verifies the server
-   * How to construct valid packets
-   * What happens after DH
-   * Fully understand how encryption/decryption works
-   * Fully understand how TCP and ssh play together
+   - Exactly where/when the server sends its public key to the client for authentication/verification
+   - Exactly when/how the client verifies the server
+   - How to construct valid packets
+   - What happens after DH
+   - Fully understand how encryption/decryption works
+   - Fully understand how TCP and ssh play together
+
 * A description of your project's architecture. This could be just a diagram of your expected code organization, but it could also include things like the setup of a target server, the data you're going to need for testing, a build system (e.g., Makefile or something similar), etc.
-   * Initiate TCP handshake
-   * Initiate ssh connection over TCP
-   * Exchange ssh protocol versions
-   * Key exchange 
-   * Diffie Hellman key exchange
-   * Symmetric encryption of packets/Unknown communications
-   * Unknown communications that provide the actual ssh service
+   - Initiate TCP handshake
+   - Initiate ssh connection over TCP
+   - Exchange ssh protocol versions
+   - Key exchange 
+   - Diffie Hellman key exchange
+   - Key re-exchange 
+   - Symmetric encryption of packets/Unknown communications
+   - Unknown communications that provide the actual ssh service
+
 * A list of feature goals.
-   * Basic ssh client operations
+   - Basic ssh client operations
       * Execute commands remotely on another machine
-   * General security feature: 
+   - General security feature: 
       * Prompting user to check fingerprint
       * Client stores hosts’ public keys
+
 * A testing and benchmarking plan.
-   * We can compare our client to a real ssh client. We have the tools to monitor what these tools are doing (e.g. Wireshark), so we can compare the details of what both clients are doing. 
+   - We can compare our client to a real ssh client. We have the tools to monitor what these tools are doing (e.g. Wireshark), so we can compare the details of what both clients are doing. 
+   - For the steps of SSH that are encrypted (and that we can’t see in Wireshark), we will need to find a way to test that everything is working as it should. One way is to run the same commands on the openSSH client and our client, and compare behaviors. 
+
 * A more detailed schedule of development than you wrote last week. In addition to a list of development steps and proposed deadlines, you should feel free to annotate items that feel uncertain at this moment.
-   * Week 3: (now)
+   - Week 3:
       * Find tools that we can use to carry out the steps in the ssh exchange that are not relevant to our project
       * Figure out details of how DH works
       * Be sure of when the server sends public key and when client verifies the server
-   * Week 4:
-      * Start coding
-         * Begin with TCP handshake
+   - Weeks 4-7:
       * Find relevant libraries 
-         * E.g. encryption/decryption libraries
-      * Identify things we thought understood, but don’t. Figure them out. Continue coding
-   * Weeks 5-7:
-      * Continue coding and filling in gaps in knowledge. 
-   * Week 8:
+         - E.g. encryption/decryption libraries
+      * Code the client (in C)
+      * The steps of the SSH exchange that we need to implement are:
+         - Protocol exchange 
+         - Key exchange init
+         - Diffie Hellman exchange
+         - Managing the sending and receiving of information once SSH connection has been setup and client is connected to the host
+         - Closing the connection
+      * We expect to run into issues while implementing the above items that will take us time to figure out. Below are some of the expected areas we will face challenges:
+         - We don’t have experience with networking, so we expect to run into issues regarding creating packets in adherence to a specific protocol (e.g. binary packet protocol). 
+         - We expect to run into general issues with writing network code in C.
+         - The latter portion of the DH exchange  and later is encrypted, so we don’t know exactly what to expect. 
+         - We expect to run into some issues encrypting and decrypting messages during and after the DH exchange (both asymmetric and symmetric encryption). 
+   - Week 8:
       * Depending on where we are in development, reach for stretch goals.
       * Begin working on our poster.
-   * Week 9: 
+   - Week 9: 
       * Poster and presentation
       * Dressed to the nines
       * Turn on charm and ✨charisma ✨
+
 * A list of things one or more of you are worried about. This could be stuff you don't understand yet, things you think might take too long, etc.
-   * Networking in general: we don’t have much experience
+   - Networking in general: we don’t have much experience
+
 * A brief explanation of how you're going to communicate and when you're going to meet to work together.
-   * Email and text/phone
-   * We have been meeting Tuesdays, Thursdays, and  at least once during the weekend. 
+   - Email and text/phone
+   - We have been meeting Tuesdays, Thursdays, and  at least once during the weekend. 
+
 * A brief explanation of how you're going to ensure that all team members contribute substantially to the end product. (It is shockingly easy for one team member to ride the wave of the rest of the team's work, and end up with no contributions to show for themselves, and even less understanding of the project as a whole. Let's make sure this doesn't happen.)
-   * Delegating tasks/breaking up steps of connection setup
-   * Making time to meet up after individual tasks have been completed to keep each other up to speed
+   - Delegating tasks/breaking up steps of connection setup
+   - Making time to meet up after individual tasks have been completed to keep each other up to speed
+   - Since SSH is a step-by-step process, and we need to do these steps in order, it is difficult to delegate tasks. We have been working separately on the same task, then coming together to compare our knowledge/results of research. 
+   - When we code separately, we will make it clear to each other what we are working on, and make an effort to catch the other up to speed on changes that we make if they are not self-evident.
