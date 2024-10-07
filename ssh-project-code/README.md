@@ -7,7 +7,7 @@ Written by Liam and Ruben for Fall CS Comps with Jeff Ondich
 client.c is a simple ssh client that runs on the command line. 
 
 
-**How to use the Makefile:**
+## How to use the Makefile:
 
 Just compile the code:
 ```makefile
