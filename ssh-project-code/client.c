@@ -85,7 +85,7 @@ void sendKexInit (int sock) {
     }
 }
 
-void start_client() {
+void start_client(const char *host, const int port) {
     struct sockaddr_in address;
     int sock = 0;
 
@@ -94,7 +94,7 @@ void start_client() {
     address.sin_family = AF_INET;
     address.sin_port = htons(22); // THIS IS THE PORT THAT THE CLIENT CONNECTS TO
     // inet_pton(AF_INET, "127.0.0.1", &address.sin_addr); // this is the host address to connect to
-    inet_pton(AF_INET, "192.168.64.6", &address.sin_addr);
+    inet_pton(AF_INET, host, &address.sin_addr);
 
     int output = connect(sock, (struct sockaddr *)&address, sizeof(address));
     
@@ -121,7 +121,15 @@ void start_client() {
     close(sock);
 }
 
-int main() {
-    start_client();
+int main(int argc, char **argv) {
+    // check & get command line arguments
+    if (argc != 3) {
+       fprintf(stderr,"usage: %s <hostname> <port>\n", argv[0]);
+       exit(0);
+    }
+    const char *host = argv[1];
+    const int port = atoi(argv[2]);
+
+    start_client(host, port);
     return 0;
 }
