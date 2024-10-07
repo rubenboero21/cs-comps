@@ -15,7 +15,8 @@ make compile
 ```makefile
 make ARGS="<hostname> <port number>"
 ```
-ie: ```makefile
+Example:
+```makefile
 make ARGS="192.168.64.6 22"
 ```
 - Clean up created files:
