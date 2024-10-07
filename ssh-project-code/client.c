@@ -18,12 +18,16 @@ void sendProtocol(int sock) {
 
     // send client protocol to server
     char *protocol = "SSH-2.0-mySSH\r\n";
-    send(sock, protocol, strlen(protocol), 0);
-
-    // recieve server response - NOT SURE WHAT TO ACTUALLY DO WITH IT
-    ssize_t bytes_recieved = recv(sock, buffer, BUFFER_SIZE, 0);
+    int sentBytes = send(sock, protocol, strlen(protocol), 0);
+    if (sentBytes != -1) {
+        printf("Successful protocl send! Number of protocol bytes sent: %i\n", sentBytes);
+    } else {
+        printf("Send did not complete successfully.\n");
+    }
     
-    if (bytes_recieved > 0) {
+    ssize_t bytesRecieved = recv(sock, buffer, BUFFER_SIZE, 0);
+    
+    if (bytesRecieved > 0) {
         printf("server protocol: %s", buffer);
     } else {
         printf("No server protocol recieved :(\n");
@@ -40,7 +44,8 @@ void generateRandomCookie(unsigned char *cookie) {
     }
 }
 
-// DOES NOT WORK - WE ARE NOT FOLLOWING BINARY PACKET PROTOCOL - were hoping that send() would handle it for us
+// this func is in shambles, we have started to build the kex packet in accordance to binary packet protocol,
+// but it is not finished
 void sendKexInit (int sock) {
     unsigned char buffer[BUFFER_SIZE];
     memset(buffer, 0, BUFFER_SIZE);  // Clear the buffer
@@ -64,7 +69,12 @@ void sendKexInit (int sock) {
     }
     printf("\n");
     
-    send(sock, buffer, 24, 0);
+    int sentBytes = send(sock, buffer, 24, 0);
+    if (sentBytes != -1) {
+        printf("Successful kex send! Number of kex bytes sent: %i\n", sentBytes);
+    } else {
+        printf("Send did not complete successfully.\n");
+    }
     
     ssize_t bytes_recieved = recv(sock, buffer, BUFFER_SIZE, 0);
     
