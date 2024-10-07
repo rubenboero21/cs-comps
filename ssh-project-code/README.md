@@ -5,6 +5,7 @@
 Written by Liam and Ruben for Fall CS Comps with Jeff Ondich
     
 client.c is a simple ssh client that runs on the command line. 
+
 The usage is:
 ```makefile
 ./<executable> <hostname> <port number>
