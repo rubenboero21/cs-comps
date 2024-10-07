@@ -20,7 +20,7 @@ void sendProtocol(int sock) {
     char *protocol = "SSH-2.0-mySSH\r\n";
     int sentBytes = send(sock, protocol, strlen(protocol), 0);
     if (sentBytes != -1) {
-        printf("Successful protocl send! Number of protocol bytes sent: %i\n", sentBytes);
+        printf("Successful protocol send! Number of protocol bytes sent: %i\n", sentBytes);
     } else {
         printf("Send did not complete successfully.\n");
     }
