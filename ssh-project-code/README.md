@@ -1,6 +1,6 @@
 # README
 
-**client.c**
+## client.c
 
 Written by Liam and Ruben for Fall CS Comps with Jeff Ondich
     
