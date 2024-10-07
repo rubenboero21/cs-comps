@@ -4,22 +4,21 @@
 
 Written by Liam and Ruben for Fall CS Comps with Jeff Ondich
     
-Client.c is a simple ssh client.
-
+client.c is a simple ssh client that runs on the command line. 
 
 **How to use the Makefile:**
 - Just compile the code:
-'''make
+```makefile
 make compile
-'''
+```
 - Compile and run the code:
-'''make
+```makefile
 make ARGS="<hostname> <port number>"
-'''
-ie: '''make
+```
+ie: ```makefile
 make ARGS="192.168.64.6 22"
-'''
+```
 - Clean up created files:
-'''make
+```makefile
 make clean
-'''
+```
