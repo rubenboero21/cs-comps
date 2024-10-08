@@ -6,10 +6,25 @@
 #include <time.h>
 
 #include <errno.h>
+#include <stdint.h>
 
 // IDK WHAT SIZE BUFFER MAKES SENSE, LAWSUS USES 1024 A LOT, SO USING THAT FOR NOW
 #define BUFFER_SIZE 1024
 #define SSH_MSG_KEXINIT 20
+
+#define MAX_PAYLOAD_SIZE 32768  // Example size limit (adjust as necessary)
+#define MAX_PADDING_SIZE 255    // Maximum padding length (1 byte field)
+#define MAX_MAC_SIZE 64         // Maximum MAC size for various algorithms (HMAC, etc.)
+
+// Struct to represent an SSH binary packet
+typedef struct {
+    uint32_t packet_length;          // Length of the packet (excluding the MAC)
+    uint8_t padding_length;          // Number of padding bytes
+    unsigned char payload[MAX_PAYLOAD_SIZE];  // Payload data
+    unsigned char padding[MAX_PADDING_SIZE];  // Padding data
+} SSHBinaryPacket;
+
+
 
 // should add error codes later
 void sendProtocol(int sock) {
