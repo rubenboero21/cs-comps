@@ -4,7 +4,6 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <time.h>
-
 #include <errno.h>
 #include <stdint.h>
 #include "client.h"
@@ -13,22 +12,30 @@
 #define BUFFER_SIZE 1024
 #define SSH_MSG_KEXINIT 20
 
-// void constructPacket(unsigned char *payload) {
+// reconfigure function to return fully formed buffer instead of struct
+BinaryPacket* constructPacket(unsigned char *payload, unsigned int payloadLength) {
 
-//     return
-// }
+    // Calculate padding length to align with the block size (16 bytes for AES)
+    unsigned int blockSize = 16;  // Example block size for AES
+    unsigned char paddingLength = blockSize - ((payloadLength + 5) % blockSize);  // 5 = packet_length (4) + padding_length (1)
 
-// void printPayload(SSHBinaryPacket *packet) {
+    BinaryPacket *bp = malloc(sizeof(BinaryPacket));
 
-//     return
-// }
+    bp -> packetLength = htonl(paddingLength + payloadLength + 1); // 
+    bp -> paddingLength = paddingLength
+    bp -> payload = payload;
+    bp -> padding = generateRandomBytes(paddingLength);
+    
+    return bp;
+}
 
 // should add error codes later
-void sendProtocol(int sock) {
+int sendProtocol(int sock) {
     unsigned char buffer[BUFFER_SIZE];
     memset(buffer, 0, BUFFER_SIZE);  // Clear the buffer
 
     // send client protocol to server
+    // should we have a null terminator on the end of the string?
     char *protocol = "SSH-2.0-mySSH\r\n";
     int sentBytes = send(sock, protocol, strlen(protocol), 0);
 
@@ -45,28 +52,34 @@ void sendProtocol(int sock) {
     } else {
         printf("No server protocol recieved :(\n");
     }
+
+    return 0;
 }
 
-// generates random 16 byte cookie for key exchange
-void generateRandomCookie(unsigned char *cookie) {
+// returns pointer to random n byte sequence 
+// remember to FREE the bytes when done with it
+unsigned char* generateRandomBytes(int numBytes) {
+    
+    unsigned char *bytes = malloc(16 * sizeof(char));
     srandom((unsigned int)time(NULL));
 
     // generate a random 1 byte number 16 times
     for (int i = 0; i < 16; i++) {
-        cookie[i] = random() % 256;
+        bytes[i] = random() % 256;
     }
+
+    return bytes;
 }
 
 // this func is in shambles, we have started to build the kex packet in accordance to binary packet protocol,
 // but it is not finished
-void sendKexInit (int sock) {
+int sendKexInit (int sock) {
     unsigned char buffer[BUFFER_SIZE];
     memset(buffer, 0, BUFFER_SIZE);  // Clear the buffer
 
-    unsigned char cookie[16];
-    generateRandomCookie(cookie);
+    unsigned char *cookie = generateRandomBytes(16);
 
-    // this is hardcoded, just trying to get it to work
+    // // this is hardcoded, just trying to get it to work
     uint32_t packetLen = 24;
     packetLen = htonl(packetLen); // fix endian-ness
     memcpy(buffer, &packetLen, sizeof(packetLen)); // packet len = 24
@@ -74,6 +87,7 @@ void sendKexInit (int sock) {
 
     buffer[5] = SSH_MSG_KEXINIT;
     memcpy(buffer + 6, cookie, 16); //
+    free(cookie);
     memset(buffer + 22, 0, 2);
 
     // printing out packet for debugging
@@ -89,6 +103,8 @@ void sendKexInit (int sock) {
         printf("Send did not complete successfully.\n");
     }
     
+    memset(buffer, 0, BUFFER_SIZE);  // Clear the buffer
+    // recv only returns the ssh payload it seems
     ssize_t bytes_recieved = recv(sock, buffer, BUFFER_SIZE, 0);
     
     if (bytes_recieved > 0) {
@@ -96,9 +112,17 @@ void sendKexInit (int sock) {
     } else {
         printf("No server response recieved :(\n");
     }
+
+    // printing out some of the response (buffer is too small for all of it)
+    // for (int i = 0; i < sizeof(buffer); i++) {
+    //     printf("%02x ", buffer[i]);
+    // }
+    // printf("\n");
+
+    return 0;
 }
 
-void start_client(const char *host, const int port) {
+int start_client(const char *host, const int port) {
     struct sockaddr_in address;
     int sock = 0;
 
@@ -119,18 +143,20 @@ void start_client(const char *host, const int port) {
 
     sendProtocol(sock);
 
-    unsigned char cookie[16];
-    generateRandomCookie(cookie);
+    unsigned char *cookie = generateRandomBytes(16);
 
     printf("random cookie:\n");
     for (int i = 0; i < 16; i++) {
         printf("%02x ", cookie[i]);
     }
     printf("\n");
+    free(cookie);
 
     sendKexInit(sock);
 
     close(sock);
+
+    return 0;
 }
 
 int main(int argc, char **argv) {
