@@ -7,24 +7,21 @@
 
 #include <errno.h>
 #include <stdint.h>
+#include "client.h"
 
 // IDK WHAT SIZE BUFFER MAKES SENSE, LAWSUS USES 1024 A LOT, SO USING THAT FOR NOW
 #define BUFFER_SIZE 1024
 #define SSH_MSG_KEXINIT 20
 
-#define MAX_PAYLOAD_SIZE 32768  // Example size limit (adjust as necessary)
-#define MAX_PADDING_SIZE 255    // Maximum padding length (1 byte field)
-#define MAX_MAC_SIZE 64         // Maximum MAC size for various algorithms (HMAC, etc.)
+// void constructPacket(unsigned char *payload) {
 
-// Struct to represent an SSH binary packet
-typedef struct {
-    uint32_t packet_length;          // Length of the packet (excluding the MAC)
-    uint8_t padding_length;          // Number of padding bytes
-    unsigned char payload[MAX_PAYLOAD_SIZE];  // Payload data
-    unsigned char padding[MAX_PADDING_SIZE];  // Padding data
-} SSHBinaryPacket;
+//     return
+// }
 
+// void printPayload(SSHBinaryPacket *packet) {
 
+//     return
+// }
 
 // should add error codes later
 void sendProtocol(int sock) {
@@ -34,6 +31,7 @@ void sendProtocol(int sock) {
     // send client protocol to server
     char *protocol = "SSH-2.0-mySSH\r\n";
     int sentBytes = send(sock, protocol, strlen(protocol), 0);
+
     if (sentBytes != -1) {
         printf("Successful protocol send! Number of protocol bytes sent: %i\n", sentBytes);
     } else {
@@ -80,7 +78,7 @@ void sendKexInit (int sock) {
 
     // printing out packet for debugging
     for (int i = 0; i < 24; i++) {
-        printf("%x ",  buffer[i]);
+        printf("%02x ", buffer[i]);
     }
     printf("\n");
     
@@ -121,7 +119,6 @@ void start_client(const char *host, const int port) {
 
     sendProtocol(sock);
 
-    // maybe use malloc to make it more clear what is going on - allocating 16 bytes
     unsigned char cookie[16];
     generateRandomCookie(cookie);
 
