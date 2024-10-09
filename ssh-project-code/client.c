@@ -6,6 +6,7 @@
 #include <time.h>
 #include <errno.h>
 #include <stdint.h>
+#include <assert.h>
 #include "client.h"
 
 // IDK WHAT SIZE BUFFER MAKES SENSE, LAWSUS USES 1024 A LOT, SO USING THAT FOR NOW
@@ -14,33 +15,33 @@
 #define BLOCKSIZE 16
 
 // reconfigure function to return fully formed buffer instead of struct
-unsigned char *constructPacket(rawByteArray *payload, size_t payloadLength) {
+// unsigned char *constructPacket(RawByteArray *payload, size_t payloadLength) {
     
-    /*
-    Calculate padding length, calculate packet length, generate random padding, calculate TOTAL packet size
-    */
-    unsigned char paddingLength = BLOCKSIZE - ((payloadLength + 5) % BLOCKSIZE);
+//     /*
+//     Calculate padding length, calculate packet length, generate random padding, calculate TOTAL packet size
+//     */
+//     unsigned char paddingLength = BLOCKSIZE - ((payloadLength + 5) % BLOCKSIZE);
 
-    uint32_t packetLength = 1 + payloadLength + paddingLength; 
+//     uint32_t packetLength = 1 + payloadLength + paddingLength; 
 
-    rawByteArray *padding = generateRandomBytes(paddingLength);
+//     RawByteArray *padding = generateRandomBytes(paddingLength);
     
-    size_t totalSize = sizeof(packetLength) + sizeof(paddingLength) + payload -> size;
+//     size_t totalSize = sizeof(packetLength) + sizeof(paddingLength) + payload -> size;
 
-    rawByteArray *bp = malloc(sizeof(rawByteArray));
-    bp -> size = totalSize;
-    bp -> data = malloc(totalSize);
+//     RawByteArray *bp = malloc(sizeof(RawByteArray));
+//     bp -> size = totalSize;
+//     bp -> data = malloc(totalSize);
 
-    /*
-        Copy contents into our packet (bp)
-    */
-    memcpy(*(bp -> data), packetLength, 4);
-    memcpy(*(bp -> data) + 4, paddingLength, 1);
-    memcpy(*(bp -> data) + 5, *(payload -> data), payload -> size);
-    memcpy(*(bp -> data) + 5 + payload -> size, *(padding -> data), padding -> size);
+//     /*
+//         Copy contents into our packet (bp)
+//     */
+//     memcpy(*(bp -> data), packetLength, 4);
+//     memcpy(*(bp -> data) + 4, paddingLength, 1);
+//     memcpy(*(bp -> data) + 5, *(payload -> data), payload -> size);
+//     memcpy(*(bp -> data) + 5 + payload -> size, *(padding -> data), padding -> size);
 
-    return bp;
-}
+//     return bp;
+// }
 
 // should add error codes later
 int sendProtocol(int sock) {
@@ -69,20 +70,26 @@ int sendProtocol(int sock) {
     return 0;
 }
 
-// returns pointer to random n byte sequence 
-// remember to FREE the bytes when done with it
-rawByteArray* generateRandomBytes(int numBytes) {
-    
-    rawByteArray *bytes = malloc(numBytes + 8); // includes uint length measurment
+// returns pointer to RawByteArray stuct that includes the generated random bytes in data variable
+// remember to FREE the struct AND data when done with it
+RawByteArray* generateRandomBytes(int numBytes) {
     srandom((unsigned int)time(NULL));
 
-    // generate a random 1 byte number 16 times
-    for (int i = 0; i < numBytes; i++) {
-        rawByteArray -> data[i] = random() % 256;
-    }
-    rawByteArray -> size = numBytes;
+    // allocate space for the struct
+    RawByteArray *bytes = malloc(sizeof(RawByteArray));
+    assert(bytes != NULL);
 
-    return rawByteArray;
+    // allocate space for the data
+    bytes->data = malloc(numBytes);
+    assert(bytes->data != NULL);
+
+    bytes->size = numBytes;
+
+    for (int i = 0; i < numBytes; i++) {
+        bytes->data[i] = random() % 256;
+    }
+
+    return bytes;
 }
 
 // this func is in shambles, we have started to build the kex packet in accordance to binary packet protocol,
@@ -91,7 +98,7 @@ int sendKexInit (int sock) {
     unsigned char buffer[BUFFER_SIZE];
     memset(buffer, 0, BUFFER_SIZE);  // Clear the buffer
 
-    unsigned char *cookie = generateRandomBytes(16);
+    RawByteArray *cookie = generateRandomBytes(16);
 
     // this is hardcoded, just trying to get it to work
     uint32_t packetLen = 24;
@@ -100,8 +107,10 @@ int sendKexInit (int sock) {
     buffer[4] = 6; // padding len = 6
 
     buffer[5] = SSH_MSG_KEXINIT;
-    memcpy(buffer + 6, cookie, 16); //
+    memcpy(buffer + 6, cookie->data, 16); 
+    free(cookie->data);
     free(cookie);
+    
     memset(buffer + 22, 0, 2);
 
     // printing out packet for debugging
@@ -157,13 +166,15 @@ int start_client(const char *host, const int port) {
 
     sendProtocol(sock);
 
-    unsigned char *cookie = generateRandomBytes(16);
+    RawByteArray *cookie = generateRandomBytes(16);
 
     printf("random cookie:\n");
     for (int i = 0; i < 16; i++) {
-        printf("%02x ", cookie[i]);
+        printf("%02x ", cookie->data[i]);
     }
     printf("\n");
+    // remember to free both data AND struct itself
+    free(cookie->data);
     free(cookie);
 
     sendKexInit(sock);
