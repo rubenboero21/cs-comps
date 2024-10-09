@@ -15,33 +15,34 @@
 #define BLOCKSIZE 16
 
 // reconfigure function to return fully formed buffer instead of struct
-// unsigned char *constructPacket(RawByteArray *payload, size_t payloadLength) {
+unsigned char *constructPacket(RawByteArray *payload, size_t payloadLength) {
     
-//     /*
-//     Calculate padding length, calculate packet length, generate random padding, calculate TOTAL packet size
-//     */
-//     unsigned char paddingLength = BLOCKSIZE - ((payloadLength + 5) % BLOCKSIZE);
+    /*
+    Calculate padding length, calculate packet length, generate random padding, calculate TOTAL packet size
+    */
+    unsigned char paddingLength = BLOCKSIZE - ((payloadLength + 5) % BLOCKSIZE);
 
-//     uint32_t packetLength = 1 + payloadLength + paddingLength; 
+    uint32_t packetLength = 1 + payloadLength + paddingLength;
 
-//     RawByteArray *padding = generateRandomBytes(paddingLength);
+    RawByteArray *padding = generateRandomBytes(paddingLength);
     
-//     size_t totalSize = sizeof(packetLength) + sizeof(paddingLength) + payload -> size;
+    // size of packet length + size of padding length + size of payload + size of padding 
+    size_t totalSize = 4 + 1 + payload -> size + padding -> size;
 
-//     RawByteArray *bp = malloc(sizeof(RawByteArray));
-//     bp -> size = totalSize;
-//     bp -> data = malloc(totalSize);
+    RawByteArray *binaryPacket = malloc(sizeof(RawByteArray));
+    binaryPacket -> size = totalSize;
+    binaryPacket -> data = malloc(totalSize);
 
-//     /*
-//         Copy contents into our packet (bp)
-//     */
-//     memcpy(*(bp -> data), packetLength, 4);
-//     memcpy(*(bp -> data) + 4, paddingLength, 1);
-//     memcpy(*(bp -> data) + 5, *(payload -> data), payload -> size);
-//     memcpy(*(bp -> data) + 5 + payload -> size, *(padding -> data), padding -> size);
+    /*
+        Copy contents into our packet (binaryPacket)
+    */
+    memcpy(binaryPacket -> data, &packetLength, 4);
+    memcpy(binaryPacket -> data + 4, &paddingLength, 1);
+    memcpy(binaryPacket -> data + 5, payload -> data, payload -> size);
+    memcpy(binaryPacket -> data + 5 + payload -> size, padding -> data, padding -> size);
 
-//     return bp;
-// }
+    return binaryPacket->data;
+}
 
 // should add error codes later
 int sendProtocol(int sock) {
