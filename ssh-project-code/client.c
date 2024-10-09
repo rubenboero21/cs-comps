@@ -11,21 +11,34 @@
 // IDK WHAT SIZE BUFFER MAKES SENSE, LAWSUS USES 1024 A LOT, SO USING THAT FOR NOW
 #define BUFFER_SIZE 1024
 #define SSH_MSG_KEXINIT 20
+#define BLOCKSIZE 16
 
 // reconfigure function to return fully formed buffer instead of struct
-BinaryPacket* constructPacket(unsigned char *payload, unsigned int payloadLength) {
-
-    // Calculate padding length to align with the block size (16 bytes for AES)
-    unsigned int blockSize = 16;  // Example block size for AES
-    unsigned char paddingLength = blockSize - ((payloadLength + 5) % blockSize);  // 5 = packet_length (4) + padding_length (1)
-
-    BinaryPacket *bp = malloc(sizeof(BinaryPacket));
-
-    bp -> packetLength = htonl(paddingLength + payloadLength + 1); // 
-    bp -> paddingLength = paddingLength
-    bp -> payload = payload;
-    bp -> padding = generateRandomBytes(paddingLength);
+unsigned char *constructPacket(rawByteArray *payload, size_t payloadLength) {
     
+    /*
+    Calculate padding length, calculate packet length, generate random padding, calculate TOTAL packet size
+    */
+    unsigned char paddingLength = BLOCKSIZE - ((payloadLength + 5) % BLOCKSIZE);
+
+    uint32_t packetLength = 1 + payloadLength + paddingLength; 
+
+    rawByteArray *padding = generateRandomBytes(paddingLength);
+    
+    size_t totalSize = sizeof(packetLength) + sizeof(paddingLength) + payload -> size;
+
+    rawByteArray *bp = malloc(sizeof(rawByteArray));
+    bp -> size = totalSize;
+    bp -> data = malloc(totalSize);
+
+    /*
+        Copy contents into our packet (bp)
+    */
+    memcpy(*(bp -> data), packetLength, 4);
+    memcpy(*(bp -> data) + 4, paddingLength, 1);
+    memcpy(*(bp -> data) + 5, *(payload -> data), payload -> size);
+    memcpy(*(bp -> data) + 5 + payload -> size, *(padding -> data), padding -> size);
+
     return bp;
 }
 
@@ -58,17 +71,18 @@ int sendProtocol(int sock) {
 
 // returns pointer to random n byte sequence 
 // remember to FREE the bytes when done with it
-unsigned char* generateRandomBytes(int numBytes) {
+rawByteArray* generateRandomBytes(int numBytes) {
     
-    unsigned char *bytes = malloc(16 * sizeof(char));
+    rawByteArray *bytes = malloc(numBytes + 8); // includes uint length measurment
     srandom((unsigned int)time(NULL));
 
     // generate a random 1 byte number 16 times
-    for (int i = 0; i < 16; i++) {
-        bytes[i] = random() % 256;
+    for (int i = 0; i < numBytes; i++) {
+        rawByteArray -> data[i] = random() % 256;
     }
+    rawByteArray -> size = numBytes;
 
-    return bytes;
+    return rawByteArray;
 }
 
 // this func is in shambles, we have started to build the kex packet in accordance to binary packet protocol,
@@ -79,7 +93,7 @@ int sendKexInit (int sock) {
 
     unsigned char *cookie = generateRandomBytes(16);
 
-    // // this is hardcoded, just trying to get it to work
+    // this is hardcoded, just trying to get it to work
     uint32_t packetLen = 24;
     packetLen = htonl(packetLen); // fix endian-ness
     memcpy(buffer, &packetLen, sizeof(packetLen)); // packet len = 24

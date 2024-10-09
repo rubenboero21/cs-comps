@@ -1,11 +1,16 @@
 
-// Struct to represent an SSH binary packet
+// // Struct to represent an SSH binary packet
+// typedef struct {
+//     uint32_t packetLength;          // Length of the packet (excluding the MAC)
+//     uint8_t paddingLength;          // Number of padding bytes
+//     unsigned char *payload;  // pointer to payload data
+//     unsigned char *padding;  // Padding data
+// } BinaryPacket;
+
 typedef struct {
-    uint32_t packetLength;          // Length of the packet (excluding the MAC)
-    uint8_t paddingLength;          // Number of padding bytes
-    unsigned char *payload;  // pointer to payload data
-    unsigned char *padding;  // Padding data
-} BinaryPacket;
+    unsigned char *data;
+    size_t size;
+} rawByteArray;
 
 // Return a packet in Binary Packet Protocol with the given payload
 /*
