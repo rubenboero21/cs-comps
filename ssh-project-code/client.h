@@ -12,12 +12,11 @@ typedef struct {
     size_t size;
 } RawByteArray;
 
-// Return a packet in Binary Packet Protocol with the given payload
 /*
-Input: Pointer to the payload of a binary packet protocol packet
-Output: A buffer containing the raw bytes of the packet.
+Input: Pointer to a RawByteArray struct that contains the payload data and size
+Output: A buffer containing the raw bytes of the packet in Binary Packet Protocol format
 */
-// BinaryPacket constructPacket(unsigned char *payload);
+unsigned char *constructPacket(RawByteArray *payload);
 
 /*
 Input: None (potentially a list of algorithms in the future)

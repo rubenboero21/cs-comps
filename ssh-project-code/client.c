@@ -15,11 +15,13 @@
 #define BLOCKSIZE 16
 
 // reconfigure function to return fully formed buffer instead of struct
-unsigned char *constructPacket(RawByteArray *payload, size_t payloadLength) {
+unsigned char *constructPacket(RawByteArray *payload) {
     
     /*
     Calculate padding length, calculate packet length, generate random padding, calculate TOTAL packet size
     */
+    size_t payloadLength = payload->size;
+    
     unsigned char paddingLength = BLOCKSIZE - ((payloadLength + 5) % BLOCKSIZE);
 
     uint32_t packetLength = 1 + payloadLength + paddingLength;
