@@ -15,16 +15,17 @@
 #define BLOCKSIZE 16
 
 // reconfigure function to return fully formed buffer instead of struct
-unsigned char *constructPacket(RawByteArray *payload) {
+// remember to free the struct AND data
+RawByteArray *constructPacket(RawByteArray *payload) {
     
     /*
-    Calculate padding length, calculate packet length, generate random padding, calculate TOTAL packet size
+        Calculate padding length, calculate packet length, generate random padding, calculate TOTAL packet size
     */
     size_t payloadLength = payload->size;
     
     unsigned char paddingLength = BLOCKSIZE - ((payloadLength + 5) % BLOCKSIZE);
 
-    uint32_t packetLength = 1 + payloadLength + paddingLength;
+    uint32_t packetLength = htonl(1 + payloadLength + paddingLength);
 
     RawByteArray *padding = generateRandomBytes(paddingLength);
     
@@ -38,13 +39,18 @@ unsigned char *constructPacket(RawByteArray *payload) {
     /*
         Copy contents into our packet (binaryPacket)
     */
-    memcpy(binaryPacket -> data, &packetLength, 4);
-    memcpy(binaryPacket -> data + 4, &paddingLength, 1);
-    memcpy(binaryPacket -> data + 5, payload -> data, payload -> size);
-    memcpy(binaryPacket -> data + 5 + payload -> size, padding -> data, padding -> size);
+    memcpy(binaryPacket -> data, &packetLength, 4); // length of packet
+    memcpy(binaryPacket -> data + 4, &paddingLength, 1); // padding length
+    memcpy(binaryPacket -> data + 5, payload -> data, payload -> size); // payload
+    memcpy(binaryPacket -> data + 5 + payload -> size, padding -> data, padding -> size); // random padding
 
-    return binaryPacket->data;
+    return binaryPacket;
 }
+
+// unsigned char *constructKexPayload() {
+    
+// }
+
 
 // should add error codes later
 int sendProtocol(int sock) {
@@ -78,7 +84,10 @@ int sendProtocol(int sock) {
 // returns pointer to RawByteArray stuct that includes the generated random bytes in data variable
 // remember to FREE the struct AND data when done with it
 RawByteArray* generateRandomBytes(int numBytes) {
-    srandom((unsigned int)time(NULL));
+    // seeding random number generator using VERY specific clock time
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    srandom(ts.tv_sec ^ ts.tv_nsec);
 
     // allocate space for the struct
     RawByteArray *bytes = malloc(sizeof(RawByteArray));
@@ -117,12 +126,6 @@ int sendKexInit (int sock) {
     free(cookie);
     
     memset(buffer + 22, 0, 2);
-
-    // printing out packet for debugging
-    for (int i = 0; i < 24; i++) {
-        printf("%02x ", buffer[i]);
-    }
-    printf("\n");
     
     int sentBytes = send(sock, buffer, 24, 0);
     if (sentBytes != -1) {
@@ -178,7 +181,8 @@ int start_client(const char *host, const int port) {
         printf("%02x ", cookie->data[i]);
     }
     printf("\n");
-    // remember to free both data AND struct itself
+
+    // remember to free both data AND struct itself 🍪
     free(cookie->data);
     free(cookie);
 

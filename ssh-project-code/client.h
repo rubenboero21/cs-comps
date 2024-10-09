@@ -14,9 +14,10 @@ typedef struct {
 
 /*
 Input: Pointer to a RawByteArray struct that contains the payload data and size
-Output: A buffer containing the raw bytes of the packet in Binary Packet Protocol format
+Output: A struct containing the raw bytes of the packet in Binary Packet Protocol format, and 
+        the size of the packet
 */
-unsigned char *constructPacket(RawByteArray *payload);
+RawByteArray *constructPacket(RawByteArray *payload);
 
 /*
 Input: None (potentially a list of algorithms in the future)
