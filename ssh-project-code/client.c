@@ -44,13 +44,81 @@ RawByteArray *constructPacket(RawByteArray *payload) {
     memcpy(binaryPacket -> data + 5, payload -> data, payload -> size); // payload
     memcpy(binaryPacket -> data + 5 + payload -> size, padding -> data, padding -> size); // random padding
 
+    free(padding -> data);
+    free(padding);
+
     return binaryPacket;
 }
 
-// unsigned char *constructKexPayload() {
-    
-// }
+size_t writeAlgoList(unsigned char *buffer, const char *list) {
+    uint32_t len = htonl(strlen(list));
+    memcpy(buffer, &len, sizeof(len));       // Write the length prefix
+    memcpy(buffer + sizeof(len), list, strlen(list));  // Write the name-list
+    return sizeof(len) + strlen(list);
+}
 
+// remember to free both struct AND data
+RawByteArray *constructKexPayload() {
+    size_t offset = 0;
+    // for now hard coding buffer size is fine bc we dont have many algos, but in the future
+    // we should either be smarter with how we allocate, or use malloc() and realloc()
+    unsigned char buffer[BUFFER_SIZE];
+    memset(buffer, 0, BUFFER_SIZE);  // Clear the buffer    
+
+    buffer[0] = SSH_MSG_KEXINIT;
+    offset += 1;
+
+    RawByteArray *cookie = generateRandomBytes(16);
+    memcpy(buffer + offset, cookie -> data, 16);
+    offset += 16;
+    free(cookie -> data);
+    free(cookie);
+
+    // in the future, prob want to import the list of algorithms from config file, not hard 
+    // code them in
+    const char *kex_algorithms = "sntrup761x25519-sha512@openssh.com";
+    offset += writeAlgoList(buffer + offset, kex_algorithms);
+
+    const char *server_host_key_algorithms = "chacha20-poly1305@openssh.com";
+    offset += writeAlgoList(buffer + offset, server_host_key_algorithms);
+    
+    const char *encryption_algorithms_client_to_server = "chacha20-poly1305@openssh.com";
+    offset += writeAlgoList(buffer + offset, encryption_algorithms_client_to_server);
+    
+    const char *encryption_algorithms_server_to_client = "chacha20-poly1305@openssh.com";
+    offset += writeAlgoList(buffer + offset, encryption_algorithms_server_to_client);
+    
+    const char *mac_algorithms_client_to_server = "none";
+    offset += writeAlgoList(buffer + offset, mac_algorithms_client_to_server);
+    
+    const char *mac_algorithms_server_to_client = "none";
+    offset += writeAlgoList(buffer + offset, mac_algorithms_server_to_client);
+    
+    const char *compression_algorithms_client_to_server = "none";
+    offset += writeAlgoList(buffer + offset, compression_algorithms_client_to_server);
+    
+    const char *compression_algorithms_server_to_client = "none";
+    offset += writeAlgoList(buffer + offset, compression_algorithms_server_to_client);
+    
+    const char *languages_client_to_server = "";
+    offset += writeAlgoList(buffer + offset, languages_client_to_server);
+    
+    const char *languages_server_to_client = "";
+    offset += writeAlgoList(buffer + offset, languages_server_to_client);
+
+    // Add boolean (first_kex_packet_follows)
+    buffer[offset++] = 0;
+
+    uint32_t reserved = htonl(0);  // Reserved field, set to 0
+    buffer[offset++] = reserved;
+    
+    RawByteArray *payload = malloc(sizeof(RawByteArray));
+    payload -> data = malloc(offset);
+    payload -> data = buffer;
+    payload -> size = offset;
+    
+    return payload;
+}
 
 // should add error codes later
 int sendProtocol(int sock) {
@@ -58,11 +126,8 @@ int sendProtocol(int sock) {
     memset(buffer, 0, BUFFER_SIZE);  // Clear the buffer
 
     // send client protocol to server
-    // including null terminator just to be safe, strlen wont include it when it sends packet
-    char *protocol = "SSH-2.0-mySSH\r\n\0";
+    char *protocol = "SSH-2.0-mySSH\r\n";
     int sentBytes = send(sock, protocol, strlen(protocol), 0);
-    // need the null terminator to end the stream, this allows the next packet to be sent
-    send(sock, "\0", 1, 0);
 
     if (sentBytes != -1) {
         printf("Successful protocol send! Number of protocol bytes sent: %i\n", sentBytes);
@@ -112,22 +177,27 @@ int sendKexInit (int sock) {
     unsigned char buffer[BUFFER_SIZE];
     memset(buffer, 0, BUFFER_SIZE);  // Clear the buffer
 
-    RawByteArray *cookie = generateRandomBytes(16);
-
-    // this is hardcoded, just trying to get it to work
-    uint32_t packetLen = 24;
-    packetLen = htonl(packetLen); // fix endian-ness
-    memcpy(buffer, &packetLen, sizeof(packetLen)); // packet len = 24
-    buffer[4] = 6; // padding len = 6
-
-    buffer[5] = SSH_MSG_KEXINIT;
-    memcpy(buffer + 6, cookie->data, 16); 
-    free(cookie->data);
-    free(cookie);
+    // RawByteArray *cookie = generateRandomBytes(16);
+    // printf("random cookie:\n");
+    // for (int i = 0; i < 16; i++) {
+    //     printf("%02x ", cookie->data[i]);
+    // }
+    // printf("\n");
+    // call functions here
+    RawByteArray *payload = constructKexPayload();
+    RawByteArray *packet = constructPacket(payload);
     
-    memset(buffer + 22, 0, 2);
-    
-    int sentBytes = send(sock, buffer, 24, 0);
+    // printing for debugging:
+    printf("PACKET:\n");
+    for (int i = 0; i < packet -> size; i++) {
+        printf("%02x ", packet->data[i]);
+    }
+    printf("\n");
+
+    // free(cookie->data);
+    // free(cookie);
+        
+    int sentBytes = send(sock, packet -> data, packet -> size, 0);
     if (sentBytes != -1) {
         printf("Successful kex send! Number of kex bytes sent: %i\n", sentBytes);
     } else {
@@ -173,18 +243,6 @@ int start_client(const char *host, const int port) {
     }
 
     sendProtocol(sock);
-
-    RawByteArray *cookie = generateRandomBytes(16);
-
-    printf("random cookie:\n");
-    for (int i = 0; i < 16; i++) {
-        printf("%02x ", cookie->data[i]);
-    }
-    printf("\n");
-
-    // remember to free both data AND struct itself 🍪
-    free(cookie->data);
-    free(cookie);
 
     sendKexInit(sock);
 

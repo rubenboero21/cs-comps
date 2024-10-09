@@ -21,9 +21,9 @@ RawByteArray *constructPacket(RawByteArray *payload);
 
 /*
 Input: None (potentially a list of algorithms in the future)
-Output: The payload in string form (the list of comma separated algorithms with len in front)
+Output: A RawByteArray struct containing the payload and the size
 */
-unsigned char *constructKexPayload();
+RawByteArray *constructKexPayload();
 
 /*
 Input: The socket to send the protocol packet to
