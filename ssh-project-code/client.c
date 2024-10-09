@@ -49,9 +49,11 @@ int sendProtocol(int sock) {
     memset(buffer, 0, BUFFER_SIZE);  // Clear the buffer
 
     // send client protocol to server
-    // should we have a null terminator on the end of the string?
-    char *protocol = "SSH-2.0-mySSH\r\n";
+    // including null terminator just to be safe, strlen wont include it when it sends packet
+    char *protocol = "SSH-2.0-mySSH\r\n\0";
     int sentBytes = send(sock, protocol, strlen(protocol), 0);
+    // need the null terminator to end the stream, this allows the next packet to be sent
+    send(sock, "\0", 1, 0);
 
     if (sentBytes != -1) {
         printf("Successful protocol send! Number of protocol bytes sent: %i\n", sentBytes);
