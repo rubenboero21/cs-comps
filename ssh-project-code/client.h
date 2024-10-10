@@ -1,12 +1,4 @@
 
-// // Struct to represent an SSH binary packet
-// typedef struct {
-//     uint32_t packetLength;          // Length of the packet (excluding the MAC)
-//     uint8_t paddingLength;          // Number of padding bytes
-//     unsigned char *payload;  // pointer to payload data
-//     unsigned char *padding;  // Padding data
-// } BinaryPacket;
-
 typedef struct {
     unsigned char *data;
     size_t size;
@@ -39,6 +31,8 @@ Output: A pointer to a RawByteArray struct that contains the random bytes in the
 RawByteArray* generateRandomBytes(int numBytes);
 
 /*
+Input: The socket to send the protocol packet to
+Output: 
 */
 int sendKexInit (int sock);
 

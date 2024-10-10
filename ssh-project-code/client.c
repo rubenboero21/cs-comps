@@ -110,11 +110,14 @@ RawByteArray *constructKexPayload() {
     buffer[offset++] = 0;
 
     uint32_t reserved = htonl(0);  // Reserved field, set to 0
-    buffer[offset++] = reserved;
+    buffer[offset] = reserved;
+    offset += 4;
     
     RawByteArray *payload = malloc(sizeof(RawByteArray));
     payload -> data = malloc(offset);
-    payload -> data = buffer;
+    // payload -> data = buffer;
+    // need to do it this way, or memory leak ensues
+    memcpy(payload->data, buffer, offset);
     payload -> size = offset;
     
     return payload;
@@ -151,7 +154,6 @@ int sendProtocol(int sock) {
 RawByteArray* generateRandomBytes(int numBytes) {
     // seeding random number generator using VERY specific clock time
     struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
     srandom(ts.tv_sec ^ ts.tv_nsec);
 
     // allocate space for the struct
@@ -171,19 +173,7 @@ RawByteArray* generateRandomBytes(int numBytes) {
     return bytes;
 }
 
-// this func is in shambles, we have started to build the kex packet in accordance to binary packet protocol,
-// but it is not finished
 int sendKexInit (int sock) {
-    unsigned char buffer[BUFFER_SIZE];
-    memset(buffer, 0, BUFFER_SIZE);  // Clear the buffer
-
-    // RawByteArray *cookie = generateRandomBytes(16);
-    // printf("random cookie:\n");
-    // for (int i = 0; i < 16; i++) {
-    //     printf("%02x ", cookie->data[i]);
-    // }
-    // printf("\n");
-    // call functions here
     RawByteArray *payload = constructKexPayload();
     RawByteArray *packet = constructPacket(payload);
     
@@ -193,18 +183,23 @@ int sendKexInit (int sock) {
         printf("%02x ", packet->data[i]);
     }
     printf("\n");
-
-    // free(cookie->data);
-    // free(cookie);
         
     int sentBytes = send(sock, packet -> data, packet -> size, 0);
+
+    free(payload->data);
+    free(payload);
+    free(packet->data);
+    free(packet);
+    
     if (sentBytes != -1) {
         printf("Successful kex send! Number of kex bytes sent: %i\n", sentBytes);
     } else {
         printf("Send did not complete successfully.\n");
     }
     
+    unsigned char buffer[BUFFER_SIZE];
     memset(buffer, 0, BUFFER_SIZE);  // Clear the buffer
+    
     // recv only returns the ssh payload it seems
     ssize_t bytes_recieved = recv(sock, buffer, BUFFER_SIZE, 0);
     
