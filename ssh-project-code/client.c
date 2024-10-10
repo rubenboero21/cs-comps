@@ -12,7 +12,7 @@
 // IDK WHAT SIZE BUFFER MAKES SENSE, LAWSUS USES 1024 A LOT, SO USING THAT FOR NOW
 #define BUFFER_SIZE 1024
 #define SSH_MSG_KEXINIT 20
-#define BLOCKSIZE 16
+#define BLOCKSIZE 16 // aes (our encryption algorithm) cipher size is 16
 
 // reconfigure function to return fully formed buffer instead of struct
 // remember to free the struct AND data
@@ -76,16 +76,16 @@ RawByteArray *constructKexPayload() {
 
     // in the future, prob want to import the list of algorithms from config file, not hard 
     // code them in
-    const char *kex_algorithms = "sntrup761x25519-sha512@openssh.com";
+    const char *kex_algorithms = "diffie-hellman-group14-sha256";
     offset += writeAlgoList(buffer + offset, kex_algorithms);
 
-    const char *server_host_key_algorithms = "chacha20-poly1305@openssh.com";
+    const char *server_host_key_algorithms = "ssh-ed25519-cert-v01@openssh.com";
     offset += writeAlgoList(buffer + offset, server_host_key_algorithms);
     
-    const char *encryption_algorithms_client_to_server = "chacha20-poly1305@openssh.com";
+    const char *encryption_algorithms_client_to_server = "aes256-gcm@openssh.com";
     offset += writeAlgoList(buffer + offset, encryption_algorithms_client_to_server);
     
-    const char *encryption_algorithms_server_to_client = "chacha20-poly1305@openssh.com";
+    const char *encryption_algorithms_server_to_client = "aes256-gcm@openssh.com";
     offset += writeAlgoList(buffer + offset, encryption_algorithms_server_to_client);
     
     const char *mac_algorithms_client_to_server = "none";
@@ -107,7 +107,8 @@ RawByteArray *constructKexPayload() {
     offset += writeAlgoList(buffer + offset, languages_server_to_client);
 
     // Add boolean (first_kex_packet_follows)
-    buffer[offset++] = 0;
+    buffer[offset] = 0;
+    offset += 1;
 
     uint32_t reserved = htonl(0);  // Reserved field, set to 0
     buffer[offset] = reserved;
@@ -178,11 +179,11 @@ int sendKexInit (int sock) {
     RawByteArray *packet = constructPacket(payload);
     
     // printing for debugging:
-    printf("PACKET:\n");
-    for (int i = 0; i < packet -> size; i++) {
-        printf("%02x ", packet->data[i]);
-    }
-    printf("\n");
+    // printf("PACKET:\n");
+    // for (int i = 0; i < packet -> size; i++) {
+    //     printf("%02x ", packet->data[i]);
+    // }
+    // printf("\n");
         
     int sentBytes = send(sock, packet -> data, packet -> size, 0);
 
