@@ -33,8 +33,10 @@ RawByteArray *constructPacket(RawByteArray *payload) {
     size_t totalSize = 4 + 1 + payload -> size + padding -> size;
 
     RawByteArray *binaryPacket = malloc(sizeof(RawByteArray));
+    assert(binaryPacket != NULL);
     binaryPacket -> size = totalSize;
     binaryPacket -> data = malloc(totalSize);
+    assert(binaryPacket -> data != NULL);
 
     /*
         Copy contents into our packet (binaryPacket)
@@ -115,7 +117,9 @@ RawByteArray *constructKexPayload() {
     offset += 4;
     
     RawByteArray *payload = malloc(sizeof(RawByteArray));
+    assert(payload != NULL);
     payload -> data = malloc(offset);
+    assert(payload -> data != NULL);
     // payload -> data = buffer;
     // need to do it this way, or memory leak ensues
     memcpy(payload->data, buffer, offset);
