@@ -76,37 +76,35 @@ RawByteArray *constructKexPayload() {
     free(cookie -> data);
     free(cookie);
 
-    // in the future, prob want to import the list of algorithms from config file, not hard 
-    // code them in
-    const char *kex_algorithms = "diffie-hellman-group14-sha256";
-    offset += writeAlgoList(buffer + offset, kex_algorithms);
+    // replace this with config file of same format in the future
+    const char *algorithms[] = {
+        // kex_algorithms
+        "diffie-hellman-group14-sha256",
+        // server_host_key_algorithms
+        "ssh-ed25519-cert-v01@openssh.com", 
+        // encryption_algorithms_client_to_server
+        "aes256-gcm@openssh.com",
+        // encryption_algorithms_server-to-client
+        "aes256-gcm@openssh.com",
+        // mac_algorithms_client_to_server
+        "none",
+        // mac_algorithms_server_to_client
+        "none",
+        // compression_algorithms_client_to_server
+        "none",
+        // compression_algorithms_server_to_client
+        "none",
+        // languages_client_to_server
+        "",
+        // languages_server_to_client
+        "",
+        // terminating character
+        0
+    };
 
-    const char *server_host_key_algorithms = "ssh-ed25519-cert-v01@openssh.com";
-    offset += writeAlgoList(buffer + offset, server_host_key_algorithms);
-    
-    const char *encryption_algorithms_client_to_server = "aes256-gcm@openssh.com";
-    offset += writeAlgoList(buffer + offset, encryption_algorithms_client_to_server);
-    
-    const char *encryption_algorithms_server_to_client = "aes256-gcm@openssh.com";
-    offset += writeAlgoList(buffer + offset, encryption_algorithms_server_to_client);
-    
-    const char *mac_algorithms_client_to_server = "none";
-    offset += writeAlgoList(buffer + offset, mac_algorithms_client_to_server);
-    
-    const char *mac_algorithms_server_to_client = "none";
-    offset += writeAlgoList(buffer + offset, mac_algorithms_server_to_client);
-    
-    const char *compression_algorithms_client_to_server = "none";
-    offset += writeAlgoList(buffer + offset, compression_algorithms_client_to_server);
-    
-    const char *compression_algorithms_server_to_client = "none";
-    offset += writeAlgoList(buffer + offset, compression_algorithms_server_to_client);
-    
-    const char *languages_client_to_server = "";
-    offset += writeAlgoList(buffer + offset, languages_client_to_server);
-    
-    const char *languages_server_to_client = "";
-    offset += writeAlgoList(buffer + offset, languages_server_to_client);
+    for (int k = 0; algorithms[k] != 0; k++) {
+        offset += writeAlgoList(buffer + offset, algorithms[k]);
+    }
 
     // Add boolean (first_kex_packet_follows)
     buffer[offset] = 0;
@@ -120,9 +118,7 @@ RawByteArray *constructKexPayload() {
     assert(payload != NULL);
     payload -> data = malloc(offset);
     assert(payload -> data != NULL);
-    // payload -> data = buffer;
-    // need to do it this way, or memory leak ensues
-    memcpy(payload->data, buffer, offset);
+    memcpy(payload->data, buffer, offset); // need to do it this way, or memory leak ensues
     payload -> size = offset;
     
     return payload;
