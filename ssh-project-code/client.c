@@ -12,15 +12,14 @@
 // IDK WHAT SIZE BUFFER MAKES SENSE, LAWSUS USES 1024 A LOT, SO USING THAT FOR NOW
 #define BUFFER_SIZE 1024
 #define SSH_MSG_KEXINIT 20
+#define SSH_MSG_KEXDH_INIT 30
 #define BLOCKSIZE 16 // aes (our encryption algorithm) cipher size is 16
 
 // reconfigure function to return fully formed buffer instead of struct
 // remember to free the struct AND data
 RawByteArray *constructPacket(RawByteArray *payload) {
     
-    /*
-        Calculate padding length, calculate packet length, generate random padding, calculate TOTAL packet size
-    */
+    // Calculate padding length, calculate packet length, generate random padding, calculate TOTAL packet size
     size_t payloadLength = payload->size;
     
     unsigned char paddingLength = BLOCKSIZE - ((payloadLength + 5) % BLOCKSIZE);
@@ -38,9 +37,7 @@ RawByteArray *constructPacket(RawByteArray *payload) {
     binaryPacket -> data = malloc(totalSize);
     assert(binaryPacket -> data != NULL);
 
-    /*
-        Copy contents into our packet (binaryPacket)
-    */
+    // Copy contents into our packet (binaryPacket)
     memcpy(binaryPacket -> data, &packetLength, 4); // length of packet
     memcpy(binaryPacket -> data + 4, &paddingLength, 1); // padding length
     memcpy(binaryPacket -> data + 5, payload -> data, payload -> size); // payload
@@ -50,6 +47,11 @@ RawByteArray *constructPacket(RawByteArray *payload) {
     free(padding);
 
     return binaryPacket;
+}
+
+int sendDiffieHellmanExchange(int sock) {
+
+    return 0;
 }
 
 size_t writeAlgoList(unsigned char *buffer, const char *list) {
@@ -241,6 +243,8 @@ int start_client(const char *host, const int port) {
     sendProtocol(sock);
 
     sendKexInit(sock);
+
+    sendDiffieHellmanExchange(sock);
 
     close(sock);
 
