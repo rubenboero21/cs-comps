@@ -13,7 +13,8 @@
 #define BUFFER_SIZE 1024
 #define SSH_MSG_KEXINIT 20
 #define SSH_MSG_KEXDH_INIT 30
-#define BLOCKSIZE 16 // aes (our encryption algorithm) cipher size is 16
+#define BLOCKSIZE 16 // aes (our encryption algorithm) cipher size is 16, will need to make 
+                     // this dynamic when we implement multiple possible algos
 
 // reconfigure function to return fully formed buffer instead of struct
 // remember to free the struct AND data
@@ -49,6 +50,10 @@ RawByteArray *constructPacket(RawByteArray *payload) {
     return binaryPacket;
 }
 
+// to get the libraries to work, need to run the following command (on Ruben's arm mac with
+// openssl installed via homebrew)
+// gcc client.c -I/opt/homebrew/opt/openssl@3/include -L/opt/homebrew/opt/openssl@3/lib -lssl -lcrypto
+// gcc <file name> -I<path to openssl install>/include -L<path to openssl install>/lib -lssl -lcrypto
 int sendDiffieHellmanExchange(int sock) {
 
     return 0;
