@@ -87,11 +87,11 @@ int sendDiffieHellmanExchange(int sock) {
     BN_mod_exp(e, g, x, p, ctx);
 
     // Convert e to MPINT
-    int length_in_bytes = BN_num_bytes(e);
+    int mpintLen = BN_num_bytes(e) + 1; // +1 len for sign byte
     unsigned char *mpint = NULL;
 
     // Allocate memory for MPINT (length + 1 for sign byte)
-    mpint = malloc(length_in_bytes + 1);
+    mpint = malloc(mpintLen);
     assert(mpint != NULL);
 
     // Get the binary representation of e
@@ -105,29 +105,42 @@ int sendDiffieHellmanExchange(int sock) {
     }
 
     // allocate memory for the entire payload
-    // +1 for sign byte, +1 for message code 
-    unsigned char *buffer = malloc(length_in_bytes + 1 + 1);
+    // +1 for message code, +4 for len of mpint
+    unsigned char *buffer = malloc(mpintLen + 1 + 4);
     assert(buffer != NULL);
 
     buffer[0] = SSH_MSG_KEXDH_INIT;
-    memcpy(buffer + 1, mpint, length_in_bytes + 1);
+    // need to add the len of the mpint to buffer
+    buffer[1] = (unsigned char)((mpintLen >> 24) & 0xFF); // most significant byte
+    buffer[2] = (unsigned char)((mpintLen >> 16) & 0xFF);
+    buffer[3] = (unsigned char)((mpintLen >> 8) & 0xFF);
+    buffer[4] = (unsigned char)(mpintLen & 0xFF); 
+    memcpy(buffer + 5, mpint, mpintLen);
     free(mpint);
 
     RawByteArray *payload = malloc(sizeof(RawByteArray));
     assert(payload != NULL);
 
     payload -> data = buffer;
-    payload -> size = length_in_bytes + 1 + 1;
+    payload -> size = mpintLen + 1;
+
+    printf("len of mpint: %02x\n", mpintLen);
+    printf("constructed payload:\n");
+    for (int i = 0; i < payload -> size; i++) {
+        printf("%02x ", payload->data[i]);
+    }
+    printf("\n");
+    // WIRESHARK IS SHOWING THAT THE PADDING IS GETTING INCLUDED IN THE VALUE OF E
 
     RawByteArray *packet = constructPacket(payload);
     free(payload);
-    
+
     send(sock, packet -> data, packet -> size, 0);
     free(buffer);
     // don't need to free packet -> data bc we set it to buffer, didn't malloc anything new
     free(packet);
 
-    // // Print the MPINT
+    // Print the MPINT
     // printf("MPINT (length: %d): ", length_in_bytes + 1);
     // for (int i = 0; i < length_in_bytes + 1; i++) {
     //     printf("%02X ", mpint[i]);
