@@ -105,18 +105,26 @@ int sendDiffieHellmanExchange(int sock) {
     }
 
     // allocate memory for the entire payload
+    // +1 for sign byte, +1 for message code 
     unsigned char *buffer = malloc(length_in_bytes + 1 + 1);
+    assert(buffer != NULL);
+
     buffer[0] = SSH_MSG_KEXDH_INIT;
     memcpy(buffer + 1, mpint, length_in_bytes + 1);
     free(mpint);
 
     RawByteArray *payload = malloc(sizeof(RawByteArray));
+    assert(payload != NULL);
+
     payload -> data = buffer;
     payload -> size = length_in_bytes + 1 + 1;
 
     RawByteArray *packet = constructPacket(payload);
+    free(payload);
+    
     send(sock, packet -> data, packet -> size, 0);
     free(buffer);
+    // don't need to free packet -> data bc we set it to buffer, didn't malloc anything new
     free(packet);
 
     // // Print the MPINT
