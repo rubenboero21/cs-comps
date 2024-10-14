@@ -87,22 +87,49 @@ int sendDiffieHellmanExchange(int sock) {
     BN_mod_exp(e, g, x, p, ctx);
 
     // Convert e to MPINT
-    int mpintLen = BN_num_bytes(e) + 1; // +1 len for sign byte
+    int bnLen = BN_num_bytes(e);
+    int mpintLen = bnLen; // Initial MPINT length (might need adjustment)
     unsigned char *mpint = NULL;
+    unsigned char *bnBin = malloc(bnLen); // Temporary buffer for BN binary
+    assert(bnBin != NULL);
+
+    // Get the binary representation of e
+    BN_bn2bin(e, bnBin); // bnBin now holds the binary form of e    
+
+    // Check if the MSB of the first byte is set for positive numbers
+    int prependZero = 0;
+    if (!BN_is_negative(e) && (bnBin[0] & 0x80)) {
+        prependZero = 1; // Need to prepend 0x00 for positive number with MSB set
+        mpintLen += 1;   // Increase MPINT length by 1 byte
+    }
 
     // Allocate memory for MPINT
     mpint = malloc(mpintLen);
     assert(mpint != NULL);
 
-    // Get the binary representation of e
-    BN_bn2bin(e, mpint + 1);
-    
-    // Set the sign byte
+    // Set the sign or prepend byte
     if (BN_is_negative(e)) {
-        mpint[0] = 0xFF; // Negative
-    } else {
-        mpint[0] = 0x00; // Positive
+        mpint[0] = 0xFF; // Negative number, no need for extra zero
+    } else if (prependZero) {
+        mpint[0] = 0x00; // Positive number with MSB set, prepend 0x00
     }
+
+    // Copy the binary representation of e to the MPINT buffer
+    if (prependZero) {
+        memcpy(mpint + 1, bnBin, bnLen); // Copy with the prepended zero byte
+    } else {
+        memcpy(mpint, bnBin, bnLen); // No prepend needed
+    }
+
+    // Free the temporary buffer
+    free(bnBin);
+
+    // Set the sign byte
+    // if (BN_is_negative(e)) {
+    //     mpint[0] = 0xFF; // Negative
+    // } else {
+    //     mpint[0] = 0x00; // Positive
+    // }
 
     // allocate memory for the entire payload
     // +1 for message code, +4 for len of mpint
@@ -135,7 +162,6 @@ int sendDiffieHellmanExchange(int sock) {
     free(payload);
 
     // send(sock, packet -> data, packet -> size, 0);
-    printf("packet size: %i\n", packet -> size);
     int sentBytes = send(sock, packet -> data, packet -> size, 0);
     free(buffer);
     // don't need to free packet -> data bc we set it to buffer, didn't malloc anything new
@@ -152,12 +178,13 @@ int sendDiffieHellmanExchange(int sock) {
     ssize_t bytesRecieved = recv(sock, serverResponse, BUFFER_SIZE, 0);
     
     if (bytesRecieved > 0) {
+        // this next line prints something, i dont know what its printing
         // printf("server DH init response: %s\n", serverResponse);
-        printf("server DH init response:\n");
-        for (int i = 0; i < sizeof(serverResponse); i++) {
-            printf("%02x ", serverResponse[i]); 
-        }
-        printf("\n");
+        // printf("server DH init response:\n");
+        // for (int i = 0; i < sizeof(serverResponse); i++) {
+        //     printf("%02x ", serverResponse[i]); 
+        // }
+        // printf("\n");
     } else {
         printf("No server DH response recieved :(\n");
     }
@@ -228,7 +255,7 @@ RawByteArray *constructKexPayload() {
         // kex_algorithms
         "diffie-hellman-group14-sha256",
         // server_host_key_algorithms
-        "ssh-ed25519-cert-v01@openssh.com", 
+        "ssh-ed25519", 
         // encryption_algorithms_client_to_server
         "aes256-gcm@openssh.com",
         // encryption_algorithms_server-to-client
