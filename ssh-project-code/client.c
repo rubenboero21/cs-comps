@@ -122,23 +122,44 @@ int sendDiffieHellmanExchange(int sock) {
     assert(payload != NULL);
 
     payload -> data = buffer;
-    payload -> size = mpintLen + 1;
+    payload -> size = mpintLen + 1 + 4; // +1 for message code, +4 for mpint len
 
-    printf("len of mpint: %02x\n", mpintLen);
-    printf("constructed payload:\n");
-    for (int i = 0; i < payload -> size; i++) {
-        printf("%02x ", payload->data[i]);
-    }
-    printf("\n");
-    // WIRESHARK IS SHOWING THAT THE PADDING IS GETTING INCLUDED IN THE VALUE OF E
+    // printf("len of mpint: %02x\n", mpintLen);
+    // printf("constructed payload:\n");
+    // for (int i = 0; i < payload -> size; i++) {
+    //     printf("%02x ", payload->data[i]);
+    // }
+    // printf("\n");
 
     RawByteArray *packet = constructPacket(payload);
     free(payload);
 
-    send(sock, packet -> data, packet -> size, 0);
+    // send(sock, packet -> data, packet -> size, 0);
+    int sentBytes = send(sock, packet -> data, packet -> size, 0);
     free(buffer);
     // don't need to free packet -> data bc we set it to buffer, didn't malloc anything new
     free(packet);
+
+    if (sentBytes != -1) {
+        printf("Successful DH init send! Number of bytes sent: %i\n", sentBytes);
+    } else {
+        printf("Send did not complete successfully.\n");
+    }
+    
+    // print part of DH server response
+    char serverResponse[BUFFER_SIZE];
+    ssize_t bytesRecieved = recv(sock, serverResponse, BUFFER_SIZE, 0);
+    
+    if (bytesRecieved > 0) {
+        // printf("server DH init response: %s\n", serverResponse);
+        printf("server DH init response:\n");
+        for (int i = 0; i < sizeof(serverResponse); i++) {
+            printf("%02x ", serverResponse[i]); 
+        }
+        printf("\n");
+    } else {
+        printf("No server DH response recieved :(\n");
+    }
 
     // Print the MPINT
     // printf("MPINT (length: %d): ", length_in_bytes + 1);
@@ -329,17 +350,16 @@ int sendKexInit (int sock) {
     // recv only returns the ssh payload it seems
     ssize_t bytes_recieved = recv(sock, buffer, BUFFER_SIZE, 0);
     
-    if (bytes_recieved > 0) {
-        printf("response: %s\n", buffer);
-    } else {
-        printf("No server response recieved :(\n");
-    }
-
-    // printing out some of the response (buffer is too small for all of it)
-    // for (int i = 0; i < sizeof(buffer); i++) {
-    //     printf("%02x ", buffer[i]);
+    // if (bytes_recieved > 0) {
+    //     printf("kex init response:\n");
+    //     // printing out some of the response (buffer is too small for all of it)
+    //     for (int i = 0; i < sizeof(buffer); i++) {
+    //         printf("%02x ", buffer[i]);
+    //     }
+    //     printf("\n");
+    // } else {
+    //     printf("No server response recieved :(\n");
     // }
-    // printf("\n");
 
     return 0;
 }
