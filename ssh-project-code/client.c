@@ -90,7 +90,7 @@ int sendDiffieHellmanExchange(int sock) {
     int mpintLen = BN_num_bytes(e) + 1; // +1 len for sign byte
     unsigned char *mpint = NULL;
 
-    // Allocate memory for MPINT (length + 1 for sign byte)
+    // Allocate memory for MPINT
     mpint = malloc(mpintLen);
     assert(mpint != NULL);
 
@@ -106,7 +106,7 @@ int sendDiffieHellmanExchange(int sock) {
 
     // allocate memory for the entire payload
     // +1 for message code, +4 for len of mpint
-    unsigned char *buffer = malloc(mpintLen + 1 + 4);
+    unsigned char *buffer = malloc(1 + 4 + mpintLen);
     assert(buffer != NULL);
 
     buffer[0] = SSH_MSG_KEXDH_INIT;
@@ -135,6 +135,7 @@ int sendDiffieHellmanExchange(int sock) {
     free(payload);
 
     // send(sock, packet -> data, packet -> size, 0);
+    printf("packet size: %i\n", packet -> size);
     int sentBytes = send(sock, packet -> data, packet -> size, 0);
     free(buffer);
     // don't need to free packet -> data bc we set it to buffer, didn't malloc anything new
@@ -350,16 +351,16 @@ int sendKexInit (int sock) {
     // recv only returns the ssh payload it seems
     ssize_t bytes_recieved = recv(sock, buffer, BUFFER_SIZE, 0);
     
-    // if (bytes_recieved > 0) {
-    //     printf("kex init response:\n");
-    //     // printing out some of the response (buffer is too small for all of it)
-    //     for (int i = 0; i < sizeof(buffer); i++) {
-    //         printf("%02x ", buffer[i]);
-    //     }
-    //     printf("\n");
-    // } else {
-    //     printf("No server response recieved :(\n");
-    // }
+    if (bytes_recieved > 0) {
+        // printf("kex init response:\n");
+        // // printing out some of the response (buffer is too small for all of it)
+        // for (int i = 0; i < sizeof(buffer); i++) {
+        //     printf("%02x ", buffer[i]);
+        // }
+        // printf("\n");
+    } else {
+        printf("No server response recieved :(\n");
+    }
 
     return 0;
 }
