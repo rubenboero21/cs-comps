@@ -69,7 +69,7 @@ RawByteArray *bignumToMpint(BIGNUM *e) {
 
     BN_bn2bin(e, eBin);
 
-    // check if the most significant byte of the first byte is set for positive numbers
+    // check if the most significant bit of the first byte is set for positive numbers
     int prependZero = 0;
     if (!BN_is_negative(e) && (eBin[0] & 0x80)) {
         prependZero = 1; // need to prepend 0x00 for positive number with MSB set
@@ -135,7 +135,7 @@ int sendDiffieHellmanExchange(int sock) {
     } while (BN_cmp(x, BN_value_one()) == -1); // BN_cmp(a, b) returns -1 if a < b
     BN_free(q);
 
-    // Compute e = g^x mod p
+    // compute e = g^x mod p
     BN_mod_exp(e, g, x, p, ctx);
 
     BN_free(p);
@@ -189,14 +189,28 @@ int sendDiffieHellmanExchange(int sock) {
     if (bytesRecieved > 0) {
         // this next line prints something, i dont know what its printing
         // printf("server DH init response: %s\n", serverResponse);
-        // printf("server DH init response:\n");
-        // for (int i = 0; i < sizeof(bytesRecieved); i++) {
-        //     printf("%02x ", serverResponse[i]); 
-        // }
-        // printf("\n");
+        printf("server DH init response:\n");
+        for (int i = 0; i < bytesRecieved; i++) {
+            printf("%02x ", (unsigned char)serverResponse[i]); 
+        }
+        printf("\n");
     } else {
         printf("No server DH response recieved :(\n");
     }
+
+    // ssize_t bytesReceived = 0;
+    // char serverResponse[BUFFER_SIZE];
+    // while ((bytesReceived = recv(sock, serverResponse, BUFFER_SIZE, 0)) > 0) {
+    //     // Process the received chunk of data
+    //     // Accumulate it, if necessary, to get the complete message
+    //     printf("Received chunk:\n");
+    //     for (int i = 0; i < bytesReceived; i++) {
+    //         // printf("%02x ", serverResponse[i]);
+    //         printf("%02x ", serverResponse[i]);
+    //     }
+    //     printf("\n");
+    //     // You may want to break the loop when you've got the full message
+    // }
     
     return 0;
 }
@@ -351,18 +365,22 @@ int sendKexInit (int sock) {
     memset(buffer, 0, BUFFER_SIZE);  // Clear the buffer
     
     // recv only returns the ssh payload it seems
-    ssize_t bytes_recieved = recv(sock, buffer, BUFFER_SIZE, 0);
-    
-    if (bytes_recieved > 0) {
-        // printf("kex init response:\n");
-        // // printing out some of the response (buffer is too small for all of it)
-        // for (int i = 0; i < sizeof(buffer); i++) {
-        //     printf("%02x ", buffer[i]);
-        // }
-        // printf("\n");
-    } else {
-        printf("No server response recieved :(\n");
-    }
+
+    // the server response is larger than buffer size, so we need to recv() multiple times 
+    // in order to fully clear the buffer of kex server messages
+    ssize_t bytes_recieved = BUFFER_SIZE; // just so that it will enter the do while loop
+    do {
+        bytes_recieved = recv(sock, buffer, BUFFER_SIZE, 0);    
+        if (bytes_recieved > 0) {
+            // printf("kex init response:\n");
+            // for (int i = 0; i < bytes_recieved; i++) {
+            //     printf("%02x ", buffer[i]);
+            // }
+            // printf("\n");
+        } else {
+            printf("No server response recieved :(\n");
+        }
+    } while (bytes_recieved == BUFFER_SIZE);
 
     return 0;
 }
