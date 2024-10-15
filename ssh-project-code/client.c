@@ -19,7 +19,6 @@
 #define BLOCKSIZE 16 // aes (our encryption algorithm) cipher size is 16, will need to make 
                      // this dynamic when we implement multiple possible algos
 
-// reconfigure function to return fully formed buffer instead of struct
 // remember to free the struct AND data
 RawByteArray *constructPacket(RawByteArray *payload) {
     
@@ -64,27 +63,39 @@ int sendDiffieHellmanExchange(int sock) {
     BIGNUM *g = BN_new();
     BIGNUM *x = BN_new();
     BIGNUM *e = BN_new();
+    // idk what context does
     BN_CTX *ctx = BN_CTX_new();
 
-    // The hexadecimal string of the large prime number
-    const char *dec_p = "179769313486231590770839156793787453197860296048756011706444423684197180216158519368947833795864925541502180565485980503646440548199239100050792877003355816639229553136239076508735759914822574862575007425302077447712589550957937778424442426617334727629299387668709443744987040614133027225199282902678806752087668575421517593598750987686174230035765418575759253034351398231325725407913926913700368287011373398768091883503046227554347558084606727487827952418640696792688525182940744594346680383290646398559634075870581264286138294341137223850641288670503013560026865243610027162515030030355267727759725909829152094493524065674458344998942458734692009285522536863347001533675641010656474986735217703362542264146700204831485697210250651166782115923297011106429116212904724187171122008088043202229093524581401255666120033670080402790080202191684272654515254399699370040567264383018087008547654978276482248091426934533697229180942196329793820487681125920873366627499406527030202177760181942146413108341442773885458407891653564404469024077168140547753382825103823336302164105055070477215157";
-    
-    const char *dec_q = "223007451985298231915202312437100749111329175504351105431327990454642337831366880058906686265279511210098194571530602282577501199797707785201201221928889180928140658535013118089743522164835056446560835971773153520488484844838504327932232082649699123188949972407960472313788617963894201826095563681298913913920405867149242493709613033320640919825176353380967282893052962740660530353400226190856108062418611865422231252510582470786781705383895556066415893049838855561200418626943765622033402192235159065960915204135572305599154330983325664700128300081813298078425025927588306115996399270187196828286406704600";
-    
+    // group 14 p value is defined in RFC 3526
+    const char *hex_p = "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE515D2261898FA051015728E5A8AACAA68FFFFFFFFFFFFFFFF";
     const char *dec_g = "2";
-    // Convert the decimal string to a BIGNUM
-    BN_dec2bn(&p, dec_p);
-    BN_dec2bn(&q, dec_q);
+
+    BN_hex2bn(&p, hex_p);
     BN_dec2bn(&g, dec_g);
 
-    // Generate a random private key x
-    // x should be a random number less than p
+    // q = (p - 1)/2
+    // NOT CONVINCED THIS q equation above is correct
+    BIGNUM *pMinusOne = BN_new();
+    BN_sub(pMinusOne, p, BN_value_one()); // p - 1
+    BN_rshift1(q, pMinusOne); // divide by 2
+    BN_free(pMinusOne);
+
+    // Generate x such that 1 < x < q
+    BIGNUM *one =  BN_new();
+    BN_one(one); // setting one to hold 1
     do {
         BN_rand_range(x, q);
-    } while (BN_is_zero(x)); // Ensure x is not zero
+    } while (BN_cmp(x, one) == -1); // BN_cmp(a, b) returns -1 if a < b
+    BN_free(one);
+    BN_free(q);
 
     // Compute e = g^x mod p
     BN_mod_exp(e, g, x, p, ctx);
+
+    BN_free(p);
+    BN_free(g);
+    BN_free(x);
+    BN_CTX_free(ctx);
 
     // Convert e to MPINT
     int bnLen = BN_num_bytes(e);
@@ -94,16 +105,15 @@ int sendDiffieHellmanExchange(int sock) {
     assert(bnBin != NULL);
 
     // Get the binary representation of e
-    BN_bn2bin(e, bnBin); // bnBin now holds the binary form of e    
+    BN_bn2bin(e, bnBin);
 
     // Check if the MSB of the first byte is set for positive numbers
     int prependZero = 0;
     if (!BN_is_negative(e) && (bnBin[0] & 0x80)) {
         prependZero = 1; // Need to prepend 0x00 for positive number with MSB set
-        mpintLen += 1;   // Increase MPINT length by 1 byte
+        mpintLen += 1; // Increase MPINT length by 1 byte
     }
 
-    // Allocate memory for MPINT
     mpint = malloc(mpintLen);
     assert(mpint != NULL);
 
@@ -113,6 +123,7 @@ int sendDiffieHellmanExchange(int sock) {
     } else if (prependZero) {
         mpint[0] = 0x00; // Positive number with MSB set, prepend 0x00
     }
+    BN_free(e);
 
     // Copy the binary representation of e to the MPINT buffer
     if (prependZero) {
@@ -120,16 +131,7 @@ int sendDiffieHellmanExchange(int sock) {
     } else {
         memcpy(mpint, bnBin, bnLen); // No prepend needed
     }
-
-    // Free the temporary buffer
     free(bnBin);
-
-    // Set the sign byte
-    // if (BN_is_negative(e)) {
-    //     mpint[0] = 0xFF; // Negative
-    // } else {
-    //     mpint[0] = 0x00; // Positive
-    // }
 
     // allocate memory for the entire payload
     // +1 for message code, +4 for len of mpint
@@ -151,17 +153,9 @@ int sendDiffieHellmanExchange(int sock) {
     payload -> data = buffer;
     payload -> size = mpintLen + 1 + 4; // +1 for message code, +4 for mpint len
 
-    // printf("len of mpint: %02x\n", mpintLen);
-    // printf("constructed payload:\n");
-    // for (int i = 0; i < payload -> size; i++) {
-    //     printf("%02x ", payload->data[i]);
-    // }
-    // printf("\n");
-
     RawByteArray *packet = constructPacket(payload);
     free(payload);
 
-    // send(sock, packet -> data, packet -> size, 0);
     int sentBytes = send(sock, packet -> data, packet -> size, 0);
     free(buffer);
     // don't need to free packet -> data bc we set it to buffer, didn't malloc anything new
@@ -188,40 +182,6 @@ int sendDiffieHellmanExchange(int sock) {
     } else {
         printf("No server DH response recieved :(\n");
     }
-
-    // Print the MPINT
-    // printf("MPINT (length: %d): ", length_in_bytes + 1);
-    // for (int i = 0; i < length_in_bytes + 1; i++) {
-    //     printf("%02X ", mpint[i]);
-    // }
-    // printf("\n");
-
-    // // Print the BIGNUM in decimal to verify it was stored correctly
-    // char *p_str = BN_bn2dec(p);
-    // printf("Stored p: %s\n", p_str);
-
-    // // Print the BIGNUM in decimal to verify it was stored correctly
-    // char *q_str = BN_bn2dec(q);
-    // printf("Stored q: %s\n", q_str);
-
-    // // Print results
-    // printf("Private key x: ");
-    // BN_print_fp(stdout, x);
-    // printf("\n");
-    
-    // printf("Computed e (g^x mod p): ");
-    // BN_print_fp(stdout, e);
-    // printf("\n");
-
-    // printf("Length of e: %d bytes\n", length_in_bytes);
-
-    // Free the memory
-    BN_free(p);
-    BN_free(q);
-    BN_free(g);
-    BN_free(x);
-    BN_free(e);
-    BN_CTX_free(ctx);
     
     return 0;
 }
