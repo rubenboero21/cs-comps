@@ -16,6 +16,7 @@
 #define BUFFER_SIZE 1024
 #define SSH_MSG_KEXINIT 20
 #define SSH_MSG_KEXDH_INIT 30
+#define SSH_MSG_NEWKEYS 21
 #define BLOCKSIZE 16 // aes (our encryption algorithm) cipher size is 16, will need to make 
                      // this dynamic when we implement multiple possible algos
 
@@ -25,8 +26,10 @@ RawByteArray *constructPacket(RawByteArray *payload) {
     // Calculate padding length, calculate packet length, generate random padding, calculate TOTAL packet size
     size_t payloadLength = payload->size;
     
+    // + 5 bytes: 4 for packet length, 1 for padding length
     unsigned char paddingLength = BLOCKSIZE - ((payloadLength + 5) % BLOCKSIZE);
 
+    // + 1 for padding length byte: payload size: actual padding bytes
     uint32_t packetLength = htonl(1 + payloadLength + paddingLength);
 
     RawByteArray *padding = generateRandomBytes(paddingLength);
@@ -50,6 +53,52 @@ RawByteArray *constructPacket(RawByteArray *payload) {
     free(padding);
 
     return binaryPacket;
+}
+
+/* Takes in a pointer to a BIGNUM and converts it to unsigned char* in mpint form
+   FREES the e that is passed in*/
+RawByteArray *bignumToMpint(BIGNUM *e) {
+    RawByteArray *mpintAndSize = malloc(sizeof(RawByteArray));
+    assert(mpintAndSize != NULL);
+
+    // convert e to mpint
+    int eLen = BN_num_bytes(e);
+    size_t mpintLen = eLen; // initial mpint length (might need adjustment)
+    unsigned char *eBin = malloc(eLen); // temporary buffer for BN binary
+    assert(eBin != NULL);
+
+    BN_bn2bin(e, eBin);
+
+    // check if the most significant byte of the first byte is set for positive numbers
+    int prependZero = 0;
+    if (!BN_is_negative(e) && (eBin[0] & 0x80)) {
+        prependZero = 1; // need to prepend 0x00 for positive number with MSB set
+        mpintLen += 1; // increase mpint length by 1 byte
+    }
+    mpintAndSize -> size = mpintLen;
+
+    unsigned char *mpint = malloc(mpintLen);
+    assert(mpint != NULL);
+
+    // set the sign or prepend byte
+    if (BN_is_negative(e)) {
+        mpint[0] = 0xFF; // negative number, no need for extra zero
+    } else if (prependZero) {
+        mpint[0] = 0x00; // positive number with MSB set, prepend 0x00
+    }
+    BN_free(e);
+
+    // copy the binary representation of e to the MPINT buffer
+    if (prependZero) {
+        memcpy(mpint + 1, eBin, eLen); // copy with the prepended zero byte
+    } else {
+        memcpy(mpint, eBin, eLen); // no prepend needed
+    }
+    free(eBin);
+
+    mpintAndSize -> data = mpint;
+
+    return mpintAndSize;
 }
 
 // to get the libraries to work, need to run the following command (on Ruben's arm mac with
@@ -80,13 +129,10 @@ int sendDiffieHellmanExchange(int sock) {
     BN_rshift1(q, pMinusOne); // divide by 2
     BN_free(pMinusOne);
 
-    // Generate x such that 1 < x < q
-    BIGNUM *one =  BN_new();
-    BN_one(one); // setting one to hold 1
+    // generate x such that 1 < x < q
     do {
         BN_rand_range(x, q);
-    } while (BN_cmp(x, one) == -1); // BN_cmp(a, b) returns -1 if a < b
-    BN_free(one);
+    } while (BN_cmp(x, BN_value_one()) == -1); // BN_cmp(a, b) returns -1 if a < b
     BN_free(q);
 
     // Compute e = g^x mod p
@@ -97,61 +143,29 @@ int sendDiffieHellmanExchange(int sock) {
     BN_free(x);
     BN_CTX_free(ctx);
 
-    // Convert e to MPINT
-    int bnLen = BN_num_bytes(e);
-    int mpintLen = bnLen; // Initial MPINT length (might need adjustment)
-    unsigned char *mpint = NULL;
-    unsigned char *bnBin = malloc(bnLen); // Temporary buffer for BN binary
-    assert(bnBin != NULL);
-
-    // Get the binary representation of e
-    BN_bn2bin(e, bnBin);
-
-    // Check if the MSB of the first byte is set for positive numbers
-    int prependZero = 0;
-    if (!BN_is_negative(e) && (bnBin[0] & 0x80)) {
-        prependZero = 1; // Need to prepend 0x00 for positive number with MSB set
-        mpintLen += 1; // Increase MPINT length by 1 byte
-    }
-
-    mpint = malloc(mpintLen);
-    assert(mpint != NULL);
-
-    // Set the sign or prepend byte
-    if (BN_is_negative(e)) {
-        mpint[0] = 0xFF; // Negative number, no need for extra zero
-    } else if (prependZero) {
-        mpint[0] = 0x00; // Positive number with MSB set, prepend 0x00
-    }
-    BN_free(e);
-
-    // Copy the binary representation of e to the MPINT buffer
-    if (prependZero) {
-        memcpy(mpint + 1, bnBin, bnLen); // Copy with the prepended zero byte
-    } else {
-        memcpy(mpint, bnBin, bnLen); // No prepend needed
-    }
-    free(bnBin);
+    RawByteArray *mpint = bignumToMpint(e);
 
     // allocate memory for the entire payload
     // +1 for message code, +4 for len of mpint
-    unsigned char *buffer = malloc(1 + 4 + mpintLen);
+    unsigned char *buffer = malloc(1 + 4 + mpint -> size);
     assert(buffer != NULL);
 
     buffer[0] = SSH_MSG_KEXDH_INIT;
     // need to add the len of the mpint to buffer
-    buffer[1] = (unsigned char)((mpintLen >> 24) & 0xFF); // most significant byte
-    buffer[2] = (unsigned char)((mpintLen >> 16) & 0xFF);
-    buffer[3] = (unsigned char)((mpintLen >> 8) & 0xFF);
-    buffer[4] = (unsigned char)(mpintLen & 0xFF); 
-    memcpy(buffer + 5, mpint, mpintLen);
-    free(mpint);
+    buffer[1] = (unsigned char)((mpint -> size >> 24) & 0xFF); // most significant byte
+    buffer[2] = (unsigned char)((mpint -> size >> 16) & 0xFF);
+    buffer[3] = (unsigned char)((mpint -> size >> 8) & 0xFF);
+    buffer[4] = (unsigned char)(mpint -> size & 0xFF); 
+
+    memcpy(buffer + 5, mpint -> data, mpint -> size);
 
     RawByteArray *payload = malloc(sizeof(RawByteArray));
     assert(payload != NULL);
 
     payload -> data = buffer;
-    payload -> size = mpintLen + 1 + 4; // +1 for message code, +4 for mpint len
+    payload -> size = mpint -> size + 1 + 4; // +1 for message code, +4 for mpint len
+    free(mpint -> data);
+    free(mpint);
 
     RawByteArray *packet = constructPacket(payload);
     free(payload);
@@ -169,13 +183,14 @@ int sendDiffieHellmanExchange(int sock) {
     
     // print part of DH server response
     char serverResponse[BUFFER_SIZE];
+    memset(serverResponse, 0, BUFFER_SIZE);  // Clear the buffer    
     ssize_t bytesRecieved = recv(sock, serverResponse, BUFFER_SIZE, 0);
     
     if (bytesRecieved > 0) {
         // this next line prints something, i dont know what its printing
         // printf("server DH init response: %s\n", serverResponse);
         // printf("server DH init response:\n");
-        // for (int i = 0; i < sizeof(serverResponse); i++) {
+        // for (int i = 0; i < sizeof(bytesRecieved); i++) {
         //     printf("%02x ", serverResponse[i]); 
         // }
         // printf("\n");
