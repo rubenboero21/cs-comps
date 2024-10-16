@@ -184,18 +184,18 @@ int sendDiffieHellmanExchange(int sock) {
     // print part of DH server response
     char serverResponse[BUFFER_SIZE];
     memset(serverResponse, 0, BUFFER_SIZE);  // Clear the buffer    
-    ssize_t bytesRecieved = recv(sock, serverResponse, BUFFER_SIZE, 0);
+    ssize_t bytesReceived = recv(sock, serverResponse, BUFFER_SIZE, 0);
     
-    if (bytesRecieved > 0) {
+    if (bytesReceived > 0) {
         // this next line prints something, i dont know what its printing
         // printf("server DH init response: %s\n", serverResponse);
         printf("server DH init response:\n");
-        for (int i = 0; i < bytesRecieved; i++) {
+        for (int i = 0; i < bytesReceived; i++) {
             printf("%02x ", (unsigned char)serverResponse[i]); 
         }
         printf("\n");
     } else {
-        printf("No server DH response recieved :(\n");
+        printf("No server DH response received :(\n");
     }
 
     // ssize_t bytesReceived = 0;
@@ -302,12 +302,12 @@ int sendProtocol(int sock) {
         printf("Send did not complete successfully.\n");
     }
     
-    ssize_t bytesRecieved = recv(sock, buffer, BUFFER_SIZE, 0);
+    ssize_t bytesReceived = recv(sock, buffer, BUFFER_SIZE, 0);
     
-    if (bytesRecieved > 0) {
+    if (bytesReceived > 0) {
         printf("server protocol: %s", buffer);
     } else {
-        printf("No server protocol recieved :(\n");
+        printf("No server protocol received :(\n");
     }
 
     return 0;
@@ -368,19 +368,19 @@ int sendKexInit (int sock) {
 
     // the server response is larger than buffer size, so we need to recv() multiple times 
     // in order to fully clear the buffer of kex server messages
-    ssize_t bytes_recieved = BUFFER_SIZE; // just so that it will enter the do while loop
+    ssize_t bytes_received = BUFFER_SIZE; // just so that it will enter the do while loop
     do {
-        bytes_recieved = recv(sock, buffer, BUFFER_SIZE, 0);    
-        if (bytes_recieved > 0) {
+        bytes_received = recv(sock, buffer, BUFFER_SIZE, 0);    
+        if (bytes_received > 0) {
             // printf("kex init response:\n");
-            // for (int i = 0; i < bytes_recieved; i++) {
+            // for (int i = 0; i < bytes_received; i++) {
             //     printf("%02x ", buffer[i]);
             // }
             // printf("\n");
         } else {
-            printf("No server response recieved :(\n");
+            printf("No server response received :(\n");
         }
-    } while (bytes_recieved == BUFFER_SIZE);
+    } while (bytes_received == BUFFER_SIZE);
 
     return 0;
 }
