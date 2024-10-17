@@ -173,8 +173,6 @@ void printServerDHResponse(unsigned char* payload) {
     printf("host key signature type: %s\n", hostSigType);
     free(hostSigTypePtr);
     
-    // offset += hostSigTypeLen;
-
     // this section of the packet is a little weird. host signature length is the length of the 
     // entire section of the packet, host signature type length is the length of the sig type, 
     // but the actual signature data doesn't have a length in the packet, so we need to calculate
@@ -233,6 +231,12 @@ int sendDiffieHellmanExchange(int sock) {
 
     RawByteArray *mpint = bignumToMpint(e);
 
+    // printf("E!: \n");
+    // for (int i = 0; i < mpint -> size; i++) {
+    //     printf("%02x ", (unsigned char)mpint -> data[i]); 
+    // }
+    // printf("\n");
+
     // allocate memory for the entire payload
     // +1 for message code, +4 for len of mpint
     unsigned char *buffer = malloc(1 + 4 + mpint -> size);
@@ -287,7 +291,8 @@ int sendDiffieHellmanExchange(int sock) {
         printf("No server DH response received :(\n");
     }
 
-    printServerDHResponse(serverResponse);
+    // UTILITY FUNC COMMENTED OUT TO MAKE OUTPUT NICER
+    // printServerDHResponse(serverResponse);
 
     // ssize_t bytesReceived = 0;
     // char serverResponse[BUFFER_SIZE];
