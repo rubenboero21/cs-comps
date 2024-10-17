@@ -101,6 +101,83 @@ RawByteArray *bignumToMpint(BIGNUM *e) {
     return mpintAndSize;
 }
 
+// takes in a payload, returns all sections of the payload (Wireshark-esque style)
+void printServerDHResponse(unsigned char* payload) {
+    int offset = 0;
+
+    uint32_t packetLen = (payload[offset] << 24) | (payload[offset + 1] << 16) | (payload[offset + 2] << 8) | payload[offset + 3];
+    offset += 4;
+    printf("Packet length: %u bytes\n", packetLen);
+
+    int paddingLen = payload[offset];
+    offset += 1;
+    printf("padding length: %u bytes\n", paddingLen);
+
+    int messageCode = payload[offset];
+    offset += 1;
+    printf("message code: %i\n", messageCode);
+    
+    uint32_t hostKeyLen = (payload[offset] << 24) | (payload[offset + 1] << 16) | (payload[offset + 2] << 8) | payload[offset + 3];
+    offset += 4;
+    printf("host key length: %u bytes\n", hostKeyLen);
+
+    uint32_t hostKeyTypeLen = (payload[offset] << 24) | (payload[offset + 1] << 16) | (payload[offset + 2] << 8) | payload[offset + 3];
+    offset += 4;
+    printf("host key type length: %u bytes\n", hostKeyTypeLen);
+
+    // I THINK THIS IS CAUSING SEG FAULTS SOMETIMES, SO COMMENTED OUT BC I DONT WANT TO FIX RN
+    // unsigned char *hostKeyType = malloc(hostKeyTypeLen + 1);
+    // unsigned char *hostKeyTypePtr = hostKeyType; // need to keep a pointer to free later
+    // hostKeyType = memcpy(hostKeyType, payload + offset, hostKeyTypeLen);
+    offset += hostKeyTypeLen;
+    // hostKeyType[hostKeyLen] = '\0';
+    // printf("host key type: %s\n", hostKeyType);
+    // free(hostKeyTypePtr);
+
+    uint32_t publicKeyLen = (payload[offset] << 24) | (payload[offset + 1] << 16) | (payload[offset + 2] << 8) | payload[offset + 3];
+    offset += 4;
+    printf("public key length: %u bytes\n", publicKeyLen);
+
+    printf("host public key: ");
+    for (int i = 0; i < publicKeyLen; i++) {
+        printf("%02x ", payload[offset]);
+        offset += 1;
+    }
+    printf("\n");
+
+    uint32_t mpintLen = (payload[offset] << 24) | (payload[offset + 1] << 16) | (payload[offset + 2] << 8) | payload[offset + 3];
+    offset += 4;
+    printf("mpint length: %u bytes\n", mpintLen);
+
+    printf("f: ");
+    for (int i = 0; i < mpintLen; i++) {
+        printf("%02x ", payload[offset]);
+        offset += 1;
+    }
+    printf("\n");
+
+    // idk what this number means since its larger than the host sig data section in wireshark
+    uint32_t hostSigLen = (payload[offset] << 24) | (payload[offset + 1] << 16) | (payload[offset + 2] << 8) | payload[offset + 3];
+    offset += 4;
+    printf("host signature length: %u bytes\n", hostSigLen);
+
+    uint32_t hostSigTypeLen = (payload[offset] << 24) | (payload[offset + 1] << 16) | (payload[offset + 2] << 8) | payload[offset + 3];
+    offset += 4;
+    printf("host signature length: %u bytes\n", hostSigTypeLen);
+
+    // add print of host key signature type after i fix seg fault error from printing above
+    offset += hostSigTypeLen;
+
+    // idk how to read the signature part without hard coding, the lengths before it dont match the size of the signature data section
+    int end = offset + 68;
+    printf("host signature data: ");
+    while (offset < end) {
+        printf("%02x ", payload[offset]);
+        offset += 1;
+    }
+    printf("\n");
+}
+
 // to get the libraries to work, need to run the following command (on Ruben's arm mac with
 // openssl installed via homebrew)
 // gcc client.c -I/opt/homebrew/opt/openssl@3/include -L/opt/homebrew/opt/openssl@3/lib -lssl -lcrypto
@@ -182,10 +259,11 @@ int sendDiffieHellmanExchange(int sock) {
     }
     
     // print part of DH server response
-    char serverResponse[BUFFER_SIZE];
+    unsigned char serverResponse[BUFFER_SIZE];
     memset(serverResponse, 0, BUFFER_SIZE);  // Clear the buffer    
     ssize_t bytesReceived = recv(sock, serverResponse, BUFFER_SIZE, 0);
-    
+    // REMEMBER WE NEED TO RECV AGAIN BC SERVER SENDS 2 MESSAGES BACK TO BACK
+
     if (bytesReceived > 0) {
         // this next line prints something, i dont know what its printing
         // printf("server DH init response: %s\n", serverResponse);
@@ -197,6 +275,8 @@ int sendDiffieHellmanExchange(int sock) {
     } else {
         printf("No server DH response received :(\n");
     }
+
+    printServerDHResponse(serverResponse);
 
     // ssize_t bytesReceived = 0;
     // char serverResponse[BUFFER_SIZE];
