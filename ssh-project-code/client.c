@@ -11,6 +11,9 @@
 
 // openssl libraries (for DH)
 #include <openssl/bn.h>
+#include <openssl/evp.h>
+#include <openssl/err.h>
+#include <openssl/bio.h>
 
 // IDK WHAT SIZE BUFFER MAKES SENSE, LAWSUS USES 1024 A LOT, SO USING THAT FOR NOW
 #define BUFFER_SIZE 1024
@@ -53,52 +56,6 @@ RawByteArray *constructPacket(RawByteArray *payload) {
     free(padding);
 
     return binaryPacket;
-}
-
-/* Takes in a pointer to a BIGNUM and converts it to unsigned char* in mpint form
-   FREES the e that is passed in*/
-RawByteArray *bignumToMpint(BIGNUM *e) {
-    RawByteArray *mpintAndSize = malloc(sizeof(RawByteArray));
-    assert(mpintAndSize != NULL);
-
-    // convert e to mpint
-    int eLen = BN_num_bytes(e);
-    size_t mpintLen = eLen; // initial mpint length (might need adjustment)
-    unsigned char *eBin = malloc(eLen); // temporary buffer for BN binary
-    assert(eBin != NULL);
-
-    BN_bn2bin(e, eBin);
-
-    // check if the most significant bit of the first byte is set for positive numbers
-    int prependZero = 0;
-    if (!BN_is_negative(e) && (eBin[0] & 0x80)) {
-        prependZero = 1; // need to prepend 0x00 for positive number with MSB set
-        mpintLen += 1; // increase mpint length by 1 byte
-    }
-    mpintAndSize -> size = mpintLen;
-
-    unsigned char *mpint = malloc(mpintLen);
-    assert(mpint != NULL);
-
-    // set the sign or prepend byte
-    if (BN_is_negative(e)) {
-        mpint[0] = 0xFF; // negative number, no need for extra zero
-    } else if (prependZero) {
-        mpint[0] = 0x00; // positive number with MSB set, prepend 0x00
-    }
-    BN_free(e);
-
-    // copy the binary representation of e to the MPINT buffer
-    if (prependZero) {
-        memcpy(mpint + 1, eBin, eLen); // copy with the prepended zero byte
-    } else {
-        memcpy(mpint, eBin, eLen); // no prepend needed
-    }
-    free(eBin);
-
-    mpintAndSize -> data = mpint;
-
-    return mpintAndSize;
 }
 
 // takes in a payload, returns all sections of the payload (Wireshark-esque style)
@@ -155,7 +112,6 @@ void printServerDHResponse(unsigned char* payload) {
     }
     printf("\n");
 
-    // idk what this number means since its larger than the host sig data section in wireshark
     uint32_t hostSigLen = (payload[offset] << 24) | (payload[offset + 1] << 16) | (payload[offset + 2] << 8) | payload[offset + 3];
     offset += 4;
     printf("host signature length: %u bytes\n", hostSigLen);
@@ -187,76 +143,125 @@ void printServerDHResponse(unsigned char* payload) {
     printf("\n");
 }
 
-// to get the libraries to work, need to run the following command (on Ruben's arm mac with
-// openssl installed via homebrew)
-// gcc client.c -I/opt/homebrew/opt/openssl@3/include -L/opt/homebrew/opt/openssl@3/lib -lssl -lcrypto
-// gcc <file name> -I<path to openssl install>/include -L<path to openssl install>/lib -lssl -lcrypto
+// Adds the leading 2s complement bit if necessary to ensure that e is positive
+RawByteArray* encodeMpint(const unsigned char* pub_key, int pub_key_len) {
+    int needs_padding = (pub_key[0] & 0x80) != 0;
+    int mpint_len = pub_key_len + (needs_padding ? 1 : 0);
+    
+    unsigned char* mpint = malloc(mpint_len);
+    if (needs_padding) {
+        mpint[0] = 0x00;
+        memcpy(mpint + 1, pub_key, pub_key_len);
+    } else {
+        memcpy(mpint, pub_key, pub_key_len);
+    }
+    
+    RawByteArray* mpintAndSize = malloc(sizeof(RawByteArray));
+    mpintAndSize -> data = mpint;
+    mpintAndSize -> size = mpint_len;
+
+    return mpintAndSize;
+}
+
+/*
+To get the libraries to work, need to run the following command (on Ruben's arm mac with
+openssl installed via homebrew)
+gcc client.c -I/opt/homebrew/opt/openssl@3/include -L/opt/homebrew/opt/openssl@3/lib -lssl -lcrypto
+gcc <file name> -I<path to openssl install>/include -L<path to openssl install>/lib -lssl -lcrypto
+*/
 int sendDiffieHellmanExchange(int sock) {
-    // Initialize BIGNUM structures
-    BIGNUM *p = BN_new();
-    BIGNUM *q = BN_new();
-    BIGNUM *g = BN_new();
-    BIGNUM *x = BN_new();
-    BIGNUM *e = BN_new();
-    // idk what context does
-    BN_CTX *ctx = BN_CTX_new();
+    EVP_PKEY_CTX *pctx = NULL, *kctx = NULL;
+    EVP_PKEY *params = NULL, *dhkey = NULL;
+    BIO *out = NULL;
+    BIGNUM *p = NULL, *g = NULL;
+    unsigned char *p_bin = NULL, *g_bin = NULL;
+    OSSL_PARAM dh_params[3];
+    int p_size = 0, g_size = 0;
 
-    // group 14 p value is defined in RFC 3526
-    const char *hex_p = "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE515D2261898FA051015728E5A8AACAA68FFFFFFFFFFFFFFFF";
-    const char *dec_g = "2";
+    // Group 14 parameters
+    const char* group14_p_hex = "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE515D2261898FA051015728E5A8AACAA68FFFFFFFFFFFFFFFF";
+    const int group14_g = 2;
 
-    BN_hex2bn(&p, hex_p);
-    BN_dec2bn(&g, dec_g);
+    // Convert Group 14 prime to BIGNUM
+    p = BN_new();
+    BN_hex2bn(&p, group14_p_hex);
 
-    // q = (p - 1)/2
-    // NOT CONVINCED THIS q equation above is correct
-    BIGNUM *pMinusOne = BN_new();
-    BN_sub(pMinusOne, p, BN_value_one()); // p - 1
-    BN_rshift1(q, pMinusOne); // divide by 2
-    BN_free(pMinusOne);
+    // Create BIGNUM for generator
+    g = BN_new();
+    BN_set_word(g, group14_g);
 
-    // generate x such that 1 < x < q
-    do {
-        BN_rand_range(x, q);
-    } while (BN_cmp(x, BN_value_one()) == -1); // BN_cmp(a, b) returns -1 if a < b
-    BN_free(q);
+    // Get sizes for p and g
+    p_size = BN_num_bytes(p);
+    g_size = BN_num_bytes(g);
 
-    // compute e = g^x mod p
-    BN_mod_exp(e, g, x, p, ctx);
+    // Allocate memory for p_bin and g_bin
+    p_bin = (unsigned char*)OPENSSL_malloc(p_size);
+    g_bin = (unsigned char*)OPENSSL_malloc(g_size);
 
-    BN_free(p);
-    BN_free(g);
-    BN_free(x);
-    BN_CTX_free(ctx);
+    // Convert p and g into binary form 
+    // need to pad out binary to ensure standard size
+    BN_bn2binpad(p, p_bin, p_size);
+    BN_bn2binpad(g, g_bin, g_size);
 
-    RawByteArray *mpint = bignumToMpint(e);
+    // Initialize the parameter context for DH key generation 
+    pctx = EVP_PKEY_CTX_new_from_name(NULL, "DH", NULL);
 
-    // printf("E!: \n");
-    // for (int i = 0; i < mpint -> size; i++) {
-    //     printf("%02x ", (unsigned char)mpint -> data[i]); 
-    // }
-    // printf("\n");
+    // Prepare the DH parameters (p and g) using OSSL_PARAM array 
+    dh_params[0] = OSSL_PARAM_construct_BN("p", p_bin, p_size);
+    dh_params[1] = OSSL_PARAM_construct_BN("g", g_bin, g_size);
+    dh_params[2] = OSSL_PARAM_construct_end();
 
-    // allocate memory for the entire payload
-    // +1 for message code, +4 for len of mpint
-    unsigned char *buffer = malloc(1 + 4 + mpint -> size);
-    assert(buffer != NULL);
+    // Use EVP_PKEY_fromdata to create an EVP_PKEY using the DH parameters 
+    EVP_PKEY_fromdata_init(pctx);
 
+    EVP_PKEY_fromdata(pctx, &params, EVP_PKEY_KEY_PARAMETERS, dh_params);
+
+    // Create key generation context
+    kctx = EVP_PKEY_CTX_new(params, NULL);
+
+    // Generate a new DH key
+    EVP_PKEY_keygen_init(kctx);
+
+    EVP_PKEY_keygen(kctx, &dhkey);
+
+    // Extract the public key e = g^x mod p
+    // Extract the public key using EVP_PKEY_get1_encoded_public_key()
+
+    // Create a buffer for the encoded public key
+    unsigned char *pub_key_encoded = NULL;
+    // size_t pub_key_len = 0;
+    EVP_PKEY_get1_encoded_public_key(dhkey, &pub_key_encoded);
+
+    // RawByteArray *mpint = bignumToMpint(pub_key_encoded);
+    
+    int pubLen = EVP_PKEY_bits(dhkey)/8;
+    RawByteArray *mpint = encodeMpint(pub_key_encoded, pubLen);
+
+    printf("public key (e)\n");
+    printf("len of key: %zu\n", mpint -> size);
+    for (int i = 0; i < mpint -> size; i++) {
+        printf("%02x ", mpint -> data[i]);
+    }
+    printf("\n");
+
+    unsigned char *buffer = malloc(mpint -> size + 1 + 4);
     buffer[0] = SSH_MSG_KEXDH_INIT;
-    // need to add the len of the mpint to buffer
-    buffer[1] = (unsigned char)((mpint -> size >> 24) & 0xFF); // most significant byte
-    buffer[2] = (unsigned char)((mpint -> size >> 16) & 0xFF);
-    buffer[3] = (unsigned char)((mpint -> size >> 8) & 0xFF);
-    buffer[4] = (unsigned char)(mpint -> size & 0xFF); 
-
+    uint32_t mpint_len_network_order = htonl(mpint->size);
+    memcpy(buffer + 1, &mpint_len_network_order, sizeof(uint32_t));
     memcpy(buffer + 5, mpint -> data, mpint -> size);
+    free(mpint -> data);
+
+    /* Optional: Print the private key */
+    // out = BIO_new_fp(stdout, BIO_NOCLOSE);
+    // if (out && dhkey) {
+    //     EVP_PKEY_print_private(out, dhkey, 0, NULL);
+    // }
 
     RawByteArray *payload = malloc(sizeof(RawByteArray));
     assert(payload != NULL);
 
     payload -> data = buffer;
     payload -> size = mpint -> size + 1 + 4; // +1 for message code, +4 for mpint len
-    free(mpint -> data);
     free(mpint);
 
     RawByteArray *packet = constructPacket(payload);
@@ -273,41 +278,34 @@ int sendDiffieHellmanExchange(int sock) {
         printf("Send did not complete successfully.\n");
     }
     
-    // print part of DH server response
-    unsigned char serverResponse[BUFFER_SIZE];
+    char serverResponse[BUFFER_SIZE];
     memset(serverResponse, 0, BUFFER_SIZE);  // Clear the buffer    
     ssize_t bytesReceived = recv(sock, serverResponse, BUFFER_SIZE, 0);
-    // REMEMBER WE NEED TO RECV AGAIN BC SERVER SENDS 2 MESSAGES BACK TO BACK
-
+    
     if (bytesReceived > 0) {
-        // this next line prints something, i dont know what its printing
-        // printf("server DH init response: %s\n", serverResponse);
         printf("server DH init response:\n");
         for (int i = 0; i < bytesReceived; i++) {
             printf("%02x ", (unsigned char)serverResponse[i]); 
         }
         printf("\n");
     } else {
-        printf("No server DH response received :(\n");
+        printf("No server DH response recieved :(\n");
     }
 
+    /* Cleanup */
+    EVP_PKEY_CTX_free(pctx);
+    EVP_PKEY_CTX_free(kctx);
+    EVP_PKEY_free(params);
+    EVP_PKEY_free(dhkey);
+    BIO_free(out);
+    if (p) BN_free(p);
+    if (g) BN_free(g);
+    if (p_bin) OPENSSL_free(p_bin);
+    if (g_bin) OPENSSL_free(g_bin);
+    
     // UTILITY FUNC COMMENTED OUT TO MAKE OUTPUT NICER
     // printServerDHResponse(serverResponse);
 
-    // ssize_t bytesReceived = 0;
-    // char serverResponse[BUFFER_SIZE];
-    // while ((bytesReceived = recv(sock, serverResponse, BUFFER_SIZE, 0)) > 0) {
-    //     // Process the received chunk of data
-    //     // Accumulate it, if necessary, to get the complete message
-    //     printf("Received chunk:\n");
-    //     for (int i = 0; i < bytesReceived; i++) {
-    //         // printf("%02x ", serverResponse[i]);
-    //         printf("%02x ", serverResponse[i]);
-    //     }
-    //     printf("\n");
-    //     // You may want to break the loop when you've got the full message
-    // }
-    
     return 0;
 }
 
