@@ -125,14 +125,13 @@ void printServerDHResponse(unsigned char* payload) {
     offset += 4;
     printf("host key type length: %u bytes\n", hostKeyTypeLen);
 
-    // I THINK THIS IS CAUSING SEG FAULTS SOMETIMES, SO COMMENTED OUT BC I DONT WANT TO FIX RN
-    // unsigned char *hostKeyType = malloc(hostKeyTypeLen + 1);
-    // unsigned char *hostKeyTypePtr = hostKeyType; // need to keep a pointer to free later
-    // hostKeyType = memcpy(hostKeyType, payload + offset, hostKeyTypeLen);
+    unsigned char *hostKeyType = malloc(hostKeyTypeLen + 1); // +1 for null terminator
+    unsigned char *hostKeyTypePtr = hostKeyType; // need to keep a pointer to free later
+    hostKeyType = memcpy(hostKeyType, payload + offset, hostKeyTypeLen);
     offset += hostKeyTypeLen;
-    // hostKeyType[hostKeyLen] = '\0';
-    // printf("host key type: %s\n", hostKeyType);
-    // free(hostKeyTypePtr);
+    hostKeyType[hostKeyTypeLen] = '\0';
+    printf("host key type: %s\n", hostKeyType);
+    free(hostKeyTypePtr);
 
     uint32_t publicKeyLen = (payload[offset] << 24) | (payload[offset + 1] << 16) | (payload[offset + 2] << 8) | payload[offset + 3];
     offset += 4;
@@ -166,10 +165,22 @@ void printServerDHResponse(unsigned char* payload) {
     printf("host signature length: %u bytes\n", hostSigTypeLen);
 
     // add print of host key signature type after i fix seg fault error from printing above
+    unsigned char *hostSigType = malloc(hostSigTypeLen + 1);
+    unsigned char *hostSigTypePtr = hostSigType;
+    hostSigType = memcpy(hostSigType, payload + offset, hostSigTypeLen);
     offset += hostSigTypeLen;
+    hostSigType[hostSigTypeLen] = '\0';
+    printf("host key signature type: %s\n", hostSigType);
+    free(hostSigTypePtr);
+    
+    // offset += hostSigTypeLen;
 
-    // idk how to read the signature part without hard coding, the lengths before it dont match the size of the signature data section
-    int end = offset + 68;
+    // this section of the packet is a little weird. host signature length is the length of the 
+    // entire section of the packet, host signature type length is the length of the sig type, 
+    // but the actual signature data doesn't have a length in the packet, so we need to calculate
+    // the length of the entire section (hostSigLen) minus the length of the host signature type 
+    // section and the 4 bytes that store the host signature type length 
+    int end = offset + hostSigLen - hostSigTypeLen - sizeof(uint32_t);
     printf("host signature data: ");
     while (offset < end) {
         printf("%02x ", payload[offset]);
