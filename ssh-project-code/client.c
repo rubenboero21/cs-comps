@@ -282,6 +282,7 @@ int sendDiffieHellmanExchange(int sock) {
     memset(serverResponse, 0, BUFFER_SIZE);  // Clear the buffer    
     ssize_t bytesReceived = recv(sock, serverResponse, BUFFER_SIZE, 0);
     
+    // looks like the response includes both of the servers responses
     if (bytesReceived > 0) {
         printf("server DH init response:\n");
         for (int i = 0; i < bytesReceived; i++) {
@@ -298,10 +299,11 @@ int sendDiffieHellmanExchange(int sock) {
     EVP_PKEY_free(params);
     EVP_PKEY_free(dhkey);
     BIO_free(out);
-    if (p) BN_free(p);
-    if (g) BN_free(g);
-    if (p_bin) OPENSSL_free(p_bin);
-    if (g_bin) OPENSSL_free(g_bin);
+    BN_free(p);
+    BN_free(g);
+    OPENSSL_free(p_bin);
+    OPENSSL_free(g_bin);
+    OPENSSL_free(pub_key_encoded);
     
     // UTILITY FUNC COMMENTED OUT TO MAKE OUTPUT NICER
     // printServerDHResponse(serverResponse);
