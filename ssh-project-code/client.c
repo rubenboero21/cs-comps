@@ -269,7 +269,8 @@ int sendDiffieHellmanExchange(int sock) {
 
     int sentBytes = send(sock, packet -> data, packet -> size, 0);
     free(buffer);
-    // don't need to free packet -> data bc we set it to buffer, didn't malloc anything new
+    // still need to free packet data even though we malloced data
+    free(packet -> data);
     free(packet);
 
     if (sentBytes != -1) {
