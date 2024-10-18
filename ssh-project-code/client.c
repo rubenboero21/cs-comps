@@ -58,6 +58,33 @@ RawByteArray *constructPacket(RawByteArray *payload) {
     return binaryPacket;
 }
 
+/*
+Extracts and returns the server's public host key (K_S), the server's public DH key (f), and the 
+*/
+RawByteArray *extractServerDHHostKey(unsigned char* payload) {
+    int offset = 6;
+
+    uint32_t hostKeyLen = (payload[offset] << 24) | (payload[offset + 1] << 16) | (payload[offset + 2] << 8) | payload[offset + 3];
+    offset += 4;
+
+    uint32_t hostKeyTypeLen = (payload[offset] << 24) | (payload[offset + 1] << 16) | (payload[offset + 2] << 8) | payload[offset + 3];
+    offset += 4;
+
+    offset += hostKeyTypeLen;
+
+    uint32_t publicKeyLen = (payload[offset] << 24) | (payload[offset + 1] << 16) | (payload[offset + 2] << 8) | payload[offset + 3];
+    offset += 4;
+
+    unsigned char *hostKey = malloc(publicKeyLen);
+    memcpy(hostKey, payload + offset, publicKeyLen);
+
+    RawByteArray *hostKeyAndSize = malloc(sizeof(RawByteArray));
+    hostKeyAndSize -> size = publicKeyLen;
+    hostKeyAndSize -> data = hostKey;
+
+    return hostKeyAndSize;
+}
+
 // takes in a payload, returns all sections of the payload (Wireshark-esque style)
 void printServerDHResponse(unsigned char* payload) {
     int offset = 0;
@@ -279,17 +306,17 @@ int sendDiffieHellmanExchange(int sock) {
         printf("Send did not complete successfully.\n");
     }
     
-    char serverResponse[BUFFER_SIZE];
+    unsigned char serverResponse[BUFFER_SIZE];
     memset(serverResponse, 0, BUFFER_SIZE);  // Clear the buffer    
     ssize_t bytesReceived = recv(sock, serverResponse, BUFFER_SIZE, 0);
     
     // looks like the response includes both of the servers responses
     if (bytesReceived > 0) {
-        printf("server DH init response:\n");
-        for (int i = 0; i < bytesReceived; i++) {
-            printf("%02x ", (unsigned char)serverResponse[i]); 
-        }
-        printf("\n");
+        // printf("server DH init response:\n");
+        // for (int i = 0; i < bytesReceived; i++) {
+        //     printf("%02x ", (unsigned char)serverResponse[i]); 
+        // }
+        // printf("\n");
     } else {
         printf("No server DH response recieved :(\n");
     }
@@ -308,6 +335,18 @@ int sendDiffieHellmanExchange(int sock) {
     
     // UTILITY FUNC COMMENTED OUT TO MAKE OUTPUT NICER
     // printServerDHResponse(serverResponse);
+
+    RawByteArray *hostKey = extractServerDHHostKey(serverResponse);
+    // printf("HOST KEY (K_S)\n");
+    // printf("host key size: %zu\n", hostKey -> size);
+    // for (int i = 0; i < hostKey -> size; i++) {
+    //     printf("%02x ", hostKey -> data[i]);
+    // }
+    // printf("\n");
+    
+    // DO STUFF WITH HOST KEY HERE
+    free(hostKey -> data);
+    free(hostKey);
 
     return 0;
 }
