@@ -62,10 +62,7 @@ RawByteArray *constructPacket(RawByteArray *payload) {
 Extracts and returns the server's public host key (K_S), the server's public DH key (f), and the 
 */
 RawByteArray *extractServerDHHostKey(unsigned char* payload) {
-    int offset = 6;
-
-    uint32_t hostKeyLen = (payload[offset] << 24) | (payload[offset + 1] << 16) | (payload[offset + 2] << 8) | payload[offset + 3];
-    offset += 4;
+    int offset = 10; // packet contents are uniform, so we can jump right to the 10th byte to begin
 
     uint32_t hostKeyTypeLen = (payload[offset] << 24) | (payload[offset + 1] << 16) | (payload[offset + 2] << 8) | payload[offset + 3];
     offset += 4;
@@ -83,6 +80,33 @@ RawByteArray *extractServerDHHostKey(unsigned char* payload) {
     hostKeyAndSize -> data = hostKey;
 
     return hostKeyAndSize;
+}
+
+RawByteArray *extractServerF(unsigned char* payload) {
+    int offset = 10;
+    // it seems weird to do the same steps for each call of an extract function. consider 
+    // making a struct to hold all the info we want, then just return that one struct
+    uint32_t hostKeyTypeLen = (payload[offset] << 24) | (payload[offset + 1] << 16) | (payload[offset + 2] << 8) | payload[offset + 3];
+    offset += 4;
+
+    offset += hostKeyTypeLen;
+
+    uint32_t publicKeyLen = (payload[offset] << 24) | (payload[offset + 1] << 16) | (payload[offset + 2] << 8) | payload[offset + 3];
+    offset += 4;
+
+    offset += publicKeyLen;
+
+    uint32_t mpintLen = (payload[offset] << 24) | (payload[offset + 1] << 16) | (payload[offset + 2] << 8) | payload[offset + 3];
+    offset += 4;
+
+    unsigned char *mpint = malloc(mpintLen);
+    memcpy(mpint, payload + offset, mpintLen);
+
+    RawByteArray *mpintAndSize = malloc(sizeof(mpintLen));
+    mpintAndSize -> size = mpintLen;
+    mpintAndSize -> data = mpint;
+
+    return mpintAndSize;
 }
 
 // takes in a payload, returns all sections of the payload (Wireshark-esque style)
@@ -334,7 +358,7 @@ int sendDiffieHellmanExchange(int sock) {
     OPENSSL_free(pub_key_encoded);
     
     // UTILITY FUNC COMMENTED OUT TO MAKE OUTPUT NICER
-    // printServerDHResponse(serverResponse);
+    printServerDHResponse(serverResponse);
 
     RawByteArray *hostKey = extractServerDHHostKey(serverResponse);
     // printf("HOST KEY (K_S)\n");
@@ -343,10 +367,22 @@ int sendDiffieHellmanExchange(int sock) {
     //     printf("%02x ", hostKey -> data[i]);
     // }
     // printf("\n");
-    
+
     // DO STUFF WITH HOST KEY HERE
     free(hostKey -> data);
     free(hostKey);
+
+    RawByteArray *mpintAndSize = extractServerF(serverResponse);
+    // printf("MPINT (f)\n");
+    // printf("host key size: %zu\n", hostKey -> size);
+    // for (int i = 0; i < mpintAndSize -> size; i++) {
+    //     printf("%02x ", mpintAndSize -> data[i]);
+    // }
+    // printf("\n");
+    
+    // DO STUFF WITH HOST KEY HERE
+    free(mpintAndSize -> data);
+    free(mpintAndSize);
 
     return 0;
 }
