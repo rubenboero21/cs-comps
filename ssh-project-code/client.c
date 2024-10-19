@@ -276,11 +276,11 @@ int verifyServerSignature(ServerDHResponse *dhResponse, const unsigned char *mes
         printf("Error: Server's signature verification failed\n");
     }
 
-cleanup:
-    if (mdctx) EVP_MD_CTX_free(mdctx);
-    if (serverPublicKey) EVP_PKEY_free(serverPublicKey);
-    
-    return ret;
+    cleanup:
+        if (mdctx) EVP_MD_CTX_free(mdctx);
+        if (serverPublicKey) EVP_PKEY_free(serverPublicKey);
+        
+        return ret;
 }
 
 /*
@@ -355,21 +355,21 @@ int sendDiffieHellmanExchange(int sock) {
     // RawByteArray *mpint = bignumToMpint(pub_key_encoded);
     
     int pubLen = EVP_PKEY_bits(dhkey)/8;
-    RawByteArray *mpint = encodeMpint(pub_key_encoded, pubLen);
+    RawByteArray *e = encodeMpint(pub_key_encoded, pubLen);
 
     printf("public key (e)\n");
-    printf("len of key: %zu\n", mpint -> size);
-    for (int i = 0; i < mpint -> size; i++) {
-        printf("%02x ", mpint -> data[i]);
+    printf("len of key: %zu\n", e -> size);
+    for (int i = 0; i < e -> size; i++) {
+        printf("%02x ", e -> data[i]);
     }
     printf("\n");
 
-    unsigned char *buffer = malloc(mpint -> size + 1 + 4);
+    unsigned char *buffer = malloc(e -> size + 1 + 4);
     buffer[0] = SSH_MSG_KEXDH_INIT;
-    uint32_t mpint_len_network_order = htonl(mpint->size);
+    uint32_t mpint_len_network_order = htonl(e->size);
     memcpy(buffer + 1, &mpint_len_network_order, sizeof(uint32_t));
-    memcpy(buffer + 5, mpint -> data, mpint -> size);
-    free(mpint -> data);
+    memcpy(buffer + 5, e -> data, e -> size);
+    free(e -> data);
 
     /* Optional: Print the private key */
     // out = BIO_new_fp(stdout, BIO_NOCLOSE);
@@ -381,8 +381,8 @@ int sendDiffieHellmanExchange(int sock) {
     assert(payload != NULL);
 
     payload -> data = buffer;
-    payload -> size = mpint -> size + 1 + 4; // +1 for message code, +4 for mpint len
-    free(mpint);
+    payload -> size = e -> size + 1 + 4; // +1 for message code, +4 for mpint len
+    free(e);
 
     RawByteArray *packet = constructPacket(payload);
     free(payload);
