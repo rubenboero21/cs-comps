@@ -59,54 +59,75 @@ RawByteArray *constructPacket(RawByteArray *payload) {
 }
 
 /*
-Extracts and returns the server's public host key (K_S), the server's public DH key (f), and the 
+Extracts and returns the server's public host key (K_S), the server's public DH key (f), and the signature of H (hash(V_C || V_S || I_C || I_S || K_S || e || f || K))
+This is hard coded to work for our server response type
+Remember to FREE the ServerDHResponse struct and its malloc'ed contents when done
 */
-RawByteArray *extractServerDHHostKey(unsigned char* payload) {
-    int offset = 10; // packet contents are uniform, so we can jump right to the 10th byte to begin
+ServerDHResponse *extractServerDHResponse(unsigned char* payload) {
+    ServerDHResponse *serverResponse = malloc(sizeof(ServerDHResponse));
+    int offset = 10; // packet contents are uniform, so we can jump right to the 9th byte to begin (base 0)
 
     uint32_t hostKeyTypeLen = (payload[offset] << 24) | (payload[offset + 1] << 16) | (payload[offset + 2] << 8) | payload[offset + 3];
+    serverResponse -> hostKeyTypeLen = hostKeyTypeLen;
     offset += 4;
 
+    unsigned char *hostKeyType = malloc(hostKeyTypeLen);
+    // unsigned char *hostKeyTypePtr = hostKeyType; // need to keep a pointer to free later
+    memcpy(hostKeyType, payload + offset, hostKeyTypeLen);
+    serverResponse -> hostKeyType = hostKeyType;
+
+    // Skip over host key type's bytes
     offset += hostKeyTypeLen;
 
     uint32_t publicKeyLen = (payload[offset] << 24) | (payload[offset + 1] << 16) | (payload[offset + 2] << 8) | payload[offset + 3];
+    serverResponse -> publicKeyLen = publicKeyLen;
     offset += 4;
 
-    unsigned char *hostKey = malloc(publicKeyLen);
-    memcpy(hostKey, payload + offset, publicKeyLen);
-
-    RawByteArray *hostKeyAndSize = malloc(sizeof(RawByteArray));
-    hostKeyAndSize -> size = publicKeyLen;
-    hostKeyAndSize -> data = hostKey;
-
-    return hostKeyAndSize;
-}
-
-RawByteArray *extractServerF(unsigned char* payload) {
-    int offset = 10;
-    // it seems weird to do the same steps for each call of an extract function. consider 
-    // making a struct to hold all the info we want, then just return that one struct
-    uint32_t hostKeyTypeLen = (payload[offset] << 24) | (payload[offset + 1] << 16) | (payload[offset + 2] << 8) | payload[offset + 3];
-    offset += 4;
-
-    offset += hostKeyTypeLen;
-
-    uint32_t publicKeyLen = (payload[offset] << 24) | (payload[offset + 1] << 16) | (payload[offset + 2] << 8) | payload[offset + 3];
-    offset += 4;
-
+    unsigned char *publicKey = malloc(publicKeyLen);
+    memcpy(publicKey, payload + offset, publicKeyLen);
+    serverResponse -> publicKey = publicKey;
     offset += publicKeyLen;
 
-    uint32_t mpintLen = (payload[offset] << 24) | (payload[offset + 1] << 16) | (payload[offset + 2] << 8) | payload[offset + 3];
+    uint32_t fLen = (payload[offset] << 24) | (payload[offset + 1] << 16) | (payload[offset + 2] << 8) | payload[offset + 3];
+    serverResponse -> fLen = fLen;
     offset += 4;
 
-    unsigned char *mpint = malloc(mpintLen);
-    memcpy(mpint, payload + offset, mpintLen);
+    unsigned char *f = malloc(fLen);
+    memcpy(f, payload + offset, fLen);
+    serverResponse -> f = f;
+    offset += fLen;
 
-    RawByteArray *mpintAndSize = malloc(sizeof(mpintLen));
-    mpintAndSize -> size = mpintLen;
-    mpintAndSize -> data = mpint;
+    uint32_t hostSigLen = (payload[offset] << 24) | (payload[offset + 1] << 16) | (payload[offset + 2] << 8) | payload[offset + 3];
+    serverResponse -> hostSigLen = hostSigLen;
+    offset += 4;
 
-    return mpintAndSize;
+    uint32_t hostSigTypeLen = (payload[offset] << 24) | (payload[offset + 1] << 16) | (payload[offset + 2] << 8) | payload[offset + 3];
+    serverResponse -> hostSigTypeLen = hostSigTypeLen;
+    offset += 4;
+
+    unsigned char *hostSigType = malloc(hostSigTypeLen);
+    memcpy(hostSigType, payload + offset, hostSigTypeLen);
+    serverResponse -> hostSigType = hostSigType;
+    offset += hostSigTypeLen;
+
+    size_t hostSigDataLen = hostSigLen - hostSigTypeLen - sizeof(uint32_t);
+    serverResponse -> hostSigDataLen = hostSigDataLen;
+
+    unsigned char *hostSigData = malloc(hostSigDataLen);
+    memcpy(hostSigData, payload + offset, hostSigDataLen);
+    serverResponse -> hostSigData = hostSigData;
+
+    return serverResponse;
+}
+
+// frees all malloc'ed data from extractServerDHResponse function
+void cleanupServerDHResponse(ServerDHResponse *serverResponse) {
+    free(serverResponse -> hostKeyType);
+    free(serverResponse -> publicKey);
+    free(serverResponse -> f);
+    free(serverResponse -> hostSigType);
+    free(serverResponse -> hostSigData);
+    free(serverResponse);
 }
 
 // takes in a payload, returns all sections of the payload (Wireshark-esque style)
@@ -134,12 +155,10 @@ void printServerDHResponse(unsigned char* payload) {
     printf("host key type length: %u bytes\n", hostKeyTypeLen);
 
     unsigned char *hostKeyType = malloc(hostKeyTypeLen + 1); // +1 for null terminator
-    unsigned char *hostKeyTypePtr = hostKeyType; // need to keep a pointer to free later
-    hostKeyType = memcpy(hostKeyType, payload + offset, hostKeyTypeLen);
+    memcpy(hostKeyType, payload + offset, hostKeyTypeLen);
     offset += hostKeyTypeLen;
     hostKeyType[hostKeyTypeLen] = '\0';
     printf("host key type: %s\n", hostKeyType);
-    free(hostKeyTypePtr);
 
     uint32_t publicKeyLen = (payload[offset] << 24) | (payload[offset + 1] << 16) | (payload[offset + 2] << 8) | payload[offset + 3];
     offset += 4;
@@ -173,12 +192,10 @@ void printServerDHResponse(unsigned char* payload) {
 
     // add print of host key signature type after i fix seg fault error from printing above
     unsigned char *hostSigType = malloc(hostSigTypeLen + 1);
-    unsigned char *hostSigTypePtr = hostSigType;
-    hostSigType = memcpy(hostSigType, payload + offset, hostSigTypeLen);
+    memcpy(hostSigType, payload + offset, hostSigTypeLen);
     offset += hostSigTypeLen;
     hostSigType[hostSigTypeLen] = '\0';
     printf("host key signature type: %s\n", hostSigType);
-    free(hostSigTypePtr);
     
     // this section of the packet is a little weird. host signature length is the length of the 
     // entire section of the packet, host signature type length is the length of the sig type, 
@@ -358,31 +375,11 @@ int sendDiffieHellmanExchange(int sock) {
     OPENSSL_free(pub_key_encoded);
     
     // UTILITY FUNC COMMENTED OUT TO MAKE OUTPUT NICER
-    printServerDHResponse(serverResponse);
-
-    RawByteArray *hostKey = extractServerDHHostKey(serverResponse);
-    // printf("HOST KEY (K_S)\n");
-    // printf("host key size: %zu\n", hostKey -> size);
-    // for (int i = 0; i < hostKey -> size; i++) {
-    //     printf("%02x ", hostKey -> data[i]);
-    // }
-    // printf("\n");
-
-    // DO STUFF WITH HOST KEY HERE
-    free(hostKey -> data);
-    free(hostKey);
-
-    RawByteArray *mpintAndSize = extractServerF(serverResponse);
-    // printf("MPINT (f)\n");
-    // printf("host key size: %zu\n", hostKey -> size);
-    // for (int i = 0; i < mpintAndSize -> size; i++) {
-    //     printf("%02x ", mpintAndSize -> data[i]);
-    // }
-    // printf("\n");
+    // printServerDHResponse(serverResponse);
     
-    // DO STUFF WITH HOST KEY HERE
-    free(mpintAndSize -> data);
-    free(mpintAndSize);
+    ServerDHResponse *dhResponse = extractServerDHResponse(serverResponse);
+    // do stuff with response here
+    cleanupServerDHResponse(dhResponse);
 
     return 0;
 }
