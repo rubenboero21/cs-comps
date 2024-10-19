@@ -14,6 +14,7 @@
 #include <openssl/evp.h>
 #include <openssl/err.h>
 #include <openssl/bio.h>
+#include <openssl/pem.h>
 
 // IDK WHAT SIZE BUFFER MAKES SENSE, LAWSUS USES 1024 A LOT, SO USING THAT FOR NOW
 #define BUFFER_SIZE 1024
@@ -231,6 +232,57 @@ RawByteArray* encodeMpint(const unsigned char* pub_key, int pub_key_len) {
     return mpintAndSize;
 }
 
+// WE NEED TO COMPUTE K BEFORE WE CAN VERIFY THE HOST
+/*
+
+*/
+int verifyServerSignature(ServerDHResponse *dhResponse, const unsigned char *message, size_t message_len) {
+    EVP_PKEY *serverPublicKey = NULL;
+    EVP_MD_CTX *mdctx = NULL;
+    int ret = 0;
+
+    // Load the server's public key from dhResponse
+    const unsigned char *p = dhResponse->publicKey;
+    serverPublicKey = d2i_PUBKEY(NULL, &p, dhResponse->publicKeyLen);
+    if (serverPublicKey == NULL) {
+        printf("Error: Could not load server's public key\n");
+        goto cleanup;
+    }
+
+    // Create a digest context for verifying the signature
+    mdctx = EVP_MD_CTX_new();
+    if (mdctx == NULL) {
+        printf("Error: Could not create digest context\n");
+        goto cleanup;
+    }
+
+    // Initialize the verification operation
+    if (EVP_DigestVerifyInit(mdctx, NULL, EVP_sha256(), NULL, serverPublicKey) != 1) {
+        printf("Error: Could not initialize digest verify operation\n");
+        goto cleanup;
+    }
+
+    // Add the message that was signed (typically the client DH public key, server DH public key, and other data)
+    if (EVP_DigestVerifyUpdate(mdctx, message, message_len) != 1) {
+        printf("Error: Could not update digest with message\n");
+        goto cleanup;
+    }
+
+    // Perform the verification using the server's signature
+    if (EVP_DigestVerifyFinal(mdctx, dhResponse->hostSigData, dhResponse->hostSigDataLen) == 1) {
+        printf("Server's signature verified successfully!\n");
+        ret = 1;  // Signature is valid
+    } else {
+        printf("Error: Server's signature verification failed\n");
+    }
+
+cleanup:
+    if (mdctx) EVP_MD_CTX_free(mdctx);
+    if (serverPublicKey) EVP_PKEY_free(serverPublicKey);
+    
+    return ret;
+}
+
 /*
 To get the libraries to work, need to run the following command (on Ruben's arm mac with
 openssl installed via homebrew)
@@ -362,6 +414,13 @@ int sendDiffieHellmanExchange(int sock) {
         printf("No server DH response recieved :(\n");
     }
 
+    ServerDHResponse *dhResponse = extractServerDHResponse(serverResponse);
+    // do stuff with response here
+    cleanupServerDHResponse(dhResponse);
+    
+    // UTILITY FUNC COMMENTED OUT TO MAKE OUTPUT NICER
+    // printServerDHResponse(serverResponse);
+
     /* Cleanup */
     EVP_PKEY_CTX_free(pctx);
     EVP_PKEY_CTX_free(kctx);
@@ -374,13 +433,6 @@ int sendDiffieHellmanExchange(int sock) {
     OPENSSL_free(g_bin);
     OPENSSL_free(pub_key_encoded);
     
-    // UTILITY FUNC COMMENTED OUT TO MAKE OUTPUT NICER
-    // printServerDHResponse(serverResponse);
-    
-    ServerDHResponse *dhResponse = extractServerDHResponse(serverResponse);
-    // do stuff with response here
-    cleanupServerDHResponse(dhResponse);
-
     return 0;
 }
 
