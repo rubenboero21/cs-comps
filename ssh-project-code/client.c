@@ -354,8 +354,8 @@ int sendDiffieHellmanExchange(int sock) {
 
     // RawByteArray *mpint = bignumToMpint(pub_key_encoded);
     
-    int pubLen = EVP_PKEY_bits(dhkey)/8;
-    RawByteArray *e = encodeMpint(pub_key_encoded, pubLen);
+    int eLen = EVP_PKEY_bits(dhkey)/8;
+    RawByteArray *e = encodeMpint(pub_key_encoded, eLen);
 
     // printf("public key (e)\n");
     // printf("len of key: %zu\n", e -> size);
@@ -372,10 +372,10 @@ int sendDiffieHellmanExchange(int sock) {
     free(e -> data);
 
     /* Optional: Print the private key */
-    // out = BIO_new_fp(stdout, BIO_NOCLOSE);
-    // if (out && dhkey) {
-    //     EVP_PKEY_print_private(out, dhkey, 0, NULL);
-    // }
+    out = BIO_new_fp(stdout, BIO_NOCLOSE);
+    if (out && dhkey) {
+        EVP_PKEY_print_private(out, dhkey, 0, NULL);
+    }
 
     RawByteArray *payload = malloc(sizeof(RawByteArray));
     assert(payload != NULL);
@@ -415,13 +415,43 @@ int sendDiffieHellmanExchange(int sock) {
     }
 
     ServerDHResponse *dhResponse = extractServerDHResponse(serverResponse);
-    // do stuff with response here
-    cleanupServerDHResponse(dhResponse);
+
+    // BELOW HERE IS US TRYING TO IMPORT F INTO A PKEY
+
+    // // Convert f to a BIGNUM
+    // BIGNUM *bn_f = BN_bin2bn(dhResponse -> f, dhResponse -> fLen, NULL);
+    BIGNUM *f_bn = BN_new();
+    BN_bin2bn(dhResponse -> f, dhResponse -> fLen, f_bn);
+
+    EVP_PKEY_CTX *peer_ctx = NULL;
+    EVP_PKEY *peerkey = NULL;
+    OSSL_PARAM peer_params[4];  // Add space for the peer's public key (f)
+    peer_ctx = EVP_PKEY_CTX_new_from_name(NULL, "DH", NULL);
+
+    // Prepare the parameters for peer's public key
+    peer_params[0] = OSSL_PARAM_construct_BN("p", p_bin, p_size);  // Using the same `p_bin` and `p_size` as you used for generating your own DH key
+    peer_params[1] = OSSL_PARAM_construct_BN("g", g_bin, g_size);  // Using the same `g_bin` and `g_size`
+    peer_params[2] = OSSL_PARAM_construct_BN("pub", dhResponse -> f, dhResponse -> fLen); // Server's public key `f`
+    peer_params[3] = OSSL_PARAM_construct_end();  // End the array
+
+    EVP_PKEY_fromdata_init(peer_ctx);
+    EVP_PKEY_fromdata(peer_ctx, &peerkey, EVP_PKEY_PUBLIC_KEY, peer_params);
     
+    printf("FFFFF:\n");
+    for (int i = 0; i < dhResponse -> fLen; i++) {
+        printf("%02x ", dhResponse -> f[i]);
+    }
+    printf("\n");
+
+    // PRINTINg TO DEBUG
+    out = BIO_new_fp(stdout, BIO_NOCLOSE);
+    EVP_PKEY_print_public(out, peerkey, 0, NULL);
+
     // UTILITY FUNC COMMENTED OUT TO MAKE OUTPUT NICER
     // printServerDHResponse(serverResponse);
 
     /* Cleanup */
+    cleanupServerDHResponse(dhResponse);
     EVP_PKEY_CTX_free(pctx);
     EVP_PKEY_CTX_free(kctx);
     EVP_PKEY_free(params);
@@ -432,6 +462,10 @@ int sendDiffieHellmanExchange(int sock) {
     OPENSSL_free(p_bin);
     OPENSSL_free(g_bin);
     OPENSSL_free(pub_key_encoded);
+    // cleaning up importing f into a pkey struct
+    BN_free(f_bn);
+    EVP_PKEY_CTX_free(peer_ctx);
+    OPENSSL_free(peerkey);
     
     return 0;
 }
