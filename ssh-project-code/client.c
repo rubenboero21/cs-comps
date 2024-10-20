@@ -357,12 +357,12 @@ int sendDiffieHellmanExchange(int sock) {
     int pubLen = EVP_PKEY_bits(dhkey)/8;
     RawByteArray *e = encodeMpint(pub_key_encoded, pubLen);
 
-    printf("public key (e)\n");
-    printf("len of key: %zu\n", e -> size);
-    for (int i = 0; i < e -> size; i++) {
-        printf("%02x ", e -> data[i]);
-    }
-    printf("\n");
+    // printf("public key (e)\n");
+    // printf("len of key: %zu\n", e -> size);
+    // for (int i = 0; i < e -> size; i++) {
+    //     printf("%02x ", e -> data[i]);
+    // }
+    // printf("\n");
 
     unsigned char *buffer = malloc(e -> size + 1 + 4);
     buffer[0] = SSH_MSG_KEXDH_INIT;
