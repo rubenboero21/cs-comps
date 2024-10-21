@@ -24,6 +24,17 @@
 #define BLOCKSIZE 16 // aes (our encryption algorithm) cipher size is 16, will need to make 
                      // this dynamic when we implement multiple possible algos
 
+// defining global variables to construct the message to hash (H) as part of server verification
+// excluding K_S, e, f, & k because we have access to those locally in sendDiffieHellmanExchange()
+unsigned char *V_C;
+size_t V_C_length;
+unsigned char *V_S;
+size_t V_S_length;
+unsigned char *I_C;
+size_t I_C_length;
+unsigned char *I_S;
+size_t I_S_length;
+
 // remember to free the struct AND data
 RawByteArray *constructPacket(RawByteArray *payload) {
     
@@ -283,6 +294,37 @@ int verifyServerSignature(ServerDHResponse *dhResponse, const unsigned char *mes
         return ret;
 }
 
+// is it weird to only pass in half the variables we need, should we make all the variables we 
+// need global?
+// NEED TO ADD K TO THE FUNC PARAMS & FUNC BODY WHEN WE HAVE IT WORKING
+RawByteArray *concatenateVerificationMessage(unsigned char *K_S, size_t K_S_length, unsigned char *e, size_t eLen, unsigned char *f, size_t fLen) {
+    // remember to add K's len
+    int sum = V_C_length + V_S_length + I_C_length + I_S_length + K_S_length + eLen + fLen;
+    unsigned char *message = malloc(sum);
+    int offset = 0;
+    memcpy(message, V_C, V_C_length);
+    offset += V_C_length;
+    memcpy(message + offset, V_S, V_S_length);
+    offset += V_S_length;
+    memcpy(message + offset, I_C, I_C_length);
+    offset += I_C_length;
+    memcpy(message + offset, I_S, I_S_length);
+    offset += I_S_length;
+    memcpy(message + offset, K_S, K_S_length);
+    offset += K_S_length;
+    memcpy(message + offset, e, eLen);
+    offset += eLen;
+    memcpy(message + offset, f, fLen);
+    offset += fLen;
+    // memcpy(message + offset, K, KLen);
+
+    RawByteArray *messageAndSize = malloc(sizeof(RawByteArray));
+    messageAndSize -> data = message;
+    messageAndSize -> size = sum;
+
+    return messageAndSize;
+}
+
 /*
 To get the libraries to work, need to run the following command (on Ruben's arm mac with
 openssl installed via homebrew)
@@ -444,7 +486,7 @@ int sendDiffieHellmanExchange(int sock) {
     printf("\n");
 
     // PRINTINg TO DEBUG
-    out = BIO_new_fp(stdout, BIO_NOCLOSE);
+    // out = BIO_new_fp(stdout, BIO_NOCLOSE);
     EVP_PKEY_print_public(out, peerkey, 0, NULL);
 
     // UTILITY FUNC COMMENTED OUT TO MAKE OUTPUT NICER
@@ -463,9 +505,9 @@ int sendDiffieHellmanExchange(int sock) {
     OPENSSL_free(g_bin);
     OPENSSL_free(pub_key_encoded);
     // cleaning up importing f into a pkey struct
-    BN_free(f_bn);
     EVP_PKEY_CTX_free(peer_ctx);
-    OPENSSL_free(peerkey);
+    BN_free(f_bn);
+    EVP_PKEY_free(peerkey);
     
     return 0;
 }
@@ -551,6 +593,11 @@ int sendProtocol(int sock) {
     char *protocol = "SSH-2.0-mySSH\r\n";
     int sentBytes = send(sock, protocol, strlen(protocol), 0);
 
+    // save client protocol globally for use in sendDiffieHellmanExchange()
+    V_C = malloc(strlen(protocol));
+    strcpy((char *)V_C, protocol);
+    V_C_length = strlen(protocol);
+
     if (sentBytes != -1) {
         printf("Successful protocol send! Number of protocol bytes sent: %i\n", sentBytes);
     } else {
@@ -559,6 +606,11 @@ int sendProtocol(int sock) {
     
     ssize_t bytesReceived = recv(sock, buffer, BUFFER_SIZE, 0);
     
+    // save server protocol globally for use in sendDiffieHellmanExchange()
+    V_S = malloc(bytesReceived);
+    memcpy(V_S, buffer, bytesReceived);
+    V_S_length = bytesReceived;
+
     if (bytesReceived > 0) {
         printf("server protocol: %s", buffer);
     } else {
@@ -595,6 +647,11 @@ RawByteArray* generateRandomBytes(int numBytes) {
 int sendKexInit (int sock) {
     RawByteArray *payload = constructKexPayload();
     RawByteArray *packet = constructPacket(payload);
+
+    // save globally for use later in sendDiffieHellmanExchange()
+    I_C = malloc(packet -> size);
+    memcpy(I_C, packet -> data, packet -> size);
+    I_C_length = packet -> size;
     
     // printing for debugging:
     // printf("PACKET:\n");
@@ -616,26 +673,23 @@ int sendKexInit (int sock) {
         printf("Send did not complete successfully.\n");
     }
     
-    unsigned char buffer[BUFFER_SIZE];
-    memset(buffer, 0, BUFFER_SIZE);  // Clear the buffer
+    unsigned char buffer[BUFFER_SIZE*2];
+    memset(buffer, 0, BUFFER_SIZE*2);  // Clear the buffer
     
     // recv only returns the ssh payload it seems
-
-    // the server response is larger than buffer size, so we need to recv() multiple times 
-    // in order to fully clear the buffer of kex server messages
-    ssize_t bytes_received = BUFFER_SIZE; // just so that it will enter the do while loop
-    do {
-        bytes_received = recv(sock, buffer, BUFFER_SIZE, 0);    
-        if (bytes_received > 0) {
-            // printf("kex init response:\n");
-            // for (int i = 0; i < bytes_received; i++) {
-            //     printf("%02x ", buffer[i]);
-            // }
-            // printf("\n");
-        } else {
-            printf("No server response received :(\n");
-        }
-    } while (bytes_received == BUFFER_SIZE);
+    size_t bytes_received = recv(sock, buffer, BUFFER_SIZE*2, 0);    
+    if (bytes_received > 0) {
+        // printf("kex init response:\n");
+        // for (int i = 0; i < bytes_received; i++) {
+        //     printf("%02x ", buffer[i]);
+        // }
+        // printf("\n");
+    } else {
+        printf("No server response received :(\n");
+    }
+    I_S = malloc(bytes_received);
+    memcpy(I_S, buffer, bytes_received);
+    I_S_length = bytes_received;
 
     return 0;
 }
@@ -680,5 +734,29 @@ int main(int argc, char **argv) {
     const int port = atoi(argv[2]);
 
     start_client(host, port);
+
+    // print statements to verify that we set the global variables correctly
+    // printf("V_C: %s", V_C);
+    // printf("V_S: ");
+    // for (int i = 0; i < V_S_length; i++) {
+    //     printf("%c", V_S[i]);
+    // }
+    // printf("I_C: ");
+    // for (int i = 0; i < I_C_length; i++) {
+    //     printf("%02x ", I_C[i]);
+    // }
+    // printf("\n");
+    // printf("I_S: ");
+    // for (int i = 0; i < I_S_length; i++) {
+    //     printf("%02x ", I_S[i]);
+    // }
+    // printf("\n");
+
+    // free global variables
+    free(V_C);
+    free(V_S);
+    free(I_C);
+    free(I_S);
+
     return 0;
 }
