@@ -336,80 +336,76 @@ int sendDiffieHellmanExchange(int sock) {
     EVP_PKEY *params = NULL, *dhkey = NULL;
     BIO *out = NULL;
     BIGNUM *p = NULL, *g = NULL;
-    unsigned char *p_bin = NULL, *g_bin = NULL;
-    OSSL_PARAM dh_params[3];
-    int p_size = 0, g_size = 0;
+    OSSL_PARAM dhParams[3];
+    unsigned char *pBin = NULL, *gBin = NULL;
+    int pSize = 0, gSize = 0;
 
-    // Group 14 parameters
-    const char* group14_p_hex = "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA18217C32905E462E36CE3BE39E772C180E86039B2783A2EC07A28FB5C55DF06F4C52C9DE2BCBF6955817183995497CEA956AE515D2261898FA051015728E5A8AACAA68FFFFFFFFFFFFFFFF";
-    const int group14_g = 2;
-
-    // Convert Group 14 prime to BIGNUM
+    // create group 14 parameters with bignum
     p = BN_new();
-    BN_hex2bn(&p, group14_p_hex);
-
-    // Create BIGNUM for generator
+    BN_get_rfc3526_prime_2048(p);
     g = BN_new();
-    BN_set_word(g, group14_g);
+    BN_set_word(g, 2);
 
-    // Get sizes for p and g
-    p_size = BN_num_bytes(p);
-    g_size = BN_num_bytes(g);
+    pSize = BN_num_bytes(p);
+    gSize = BN_num_bytes(g);
 
-    // Allocate memory for p_bin and g_bin
-    p_bin = (unsigned char*)OPENSSL_malloc(p_size);
-    g_bin = (unsigned char*)OPENSSL_malloc(g_size);
+    // allocate memory for pBin and gBin
+    pBin = (unsigned char*)OPENSSL_malloc(pSize);
+    gBin = (unsigned char*)OPENSSL_malloc(gSize);
 
-    // Convert p and g into binary form 
+    // convert p and g into binary form 
     // need to pad out binary to ensure standard size
-    BN_bn2binpad(p, p_bin, p_size);
-    BN_bn2binpad(g, g_bin, g_size);
+    BN_bn2binpad(p, pBin, pSize);
+    BN_bn2binpad(g, gBin, gSize);
 
-    // Initialize the parameter context for DH key generation 
+    // initialize the parameter context for DH key generation 
     pctx = EVP_PKEY_CTX_new_from_name(NULL, "DH", NULL);
 
-    // Prepare the DH parameters (p and g) using OSSL_PARAM array 
-    dh_params[0] = OSSL_PARAM_construct_BN("p", p_bin, p_size);
-    dh_params[1] = OSSL_PARAM_construct_BN("g", g_bin, g_size);
-    dh_params[2] = OSSL_PARAM_construct_end();
+    // prepare the DH parameters (p and g) using OSSL_PARAM array 
+    dhParams[0] = OSSL_PARAM_construct_BN("p", pBin, pSize);
+    dhParams[1] = OSSL_PARAM_construct_BN("g", gBin, gSize);
+    dhParams[2] = OSSL_PARAM_construct_end();
 
-    // Use EVP_PKEY_fromdata to create an EVP_PKEY using the DH parameters 
+    // use EVP_PKEY_fromdata to create an EVP_PKEY using the DH parameters 
     EVP_PKEY_fromdata_init(pctx);
+    EVP_PKEY_fromdata(pctx, &params, EVP_PKEY_KEY_PARAMETERS, dhParams);
 
-    EVP_PKEY_fromdata(pctx, &params, EVP_PKEY_KEY_PARAMETERS, dh_params);
-
-    // Create key generation context
+    // generate a new DH key
     kctx = EVP_PKEY_CTX_new(params, NULL);
-
-    // Generate a new DH key
     EVP_PKEY_keygen_init(kctx);
-
     EVP_PKEY_keygen(kctx, &dhkey);
 
-    // Extract the public key e = g^x mod p
-    // Extract the public key using EVP_PKEY_get1_encoded_public_key()
+    // extract the public key BIGNUM
+    BIGNUM *eBN = NULL;
+    EVP_PKEY_get_bn_param(dhkey, "pub", &eBN);
 
-    // Create a buffer for the encoded public key
-    unsigned char *pub_key_encoded = NULL;
-    // size_t pub_key_len = 0;
-    EVP_PKEY_get1_encoded_public_key(dhkey, &pub_key_encoded);
+    int eLen = BN_num_bytes(eBN);  // get the length of the public key in bytes
+    unsigned char *eNetworkOrder = (unsigned char *)malloc(eLen);
 
-    // RawByteArray *mpint = bignumToMpint(pub_key_encoded);
+    BN_bn2bin(eBN, eNetworkOrder);
+
+    BN_free(eBN);
+
+    // swap endian-ness from little-endian to big-endian
+    for (int i = 0; i < eLen / 2; i++) {
+        unsigned char temp = eNetworkOrder[i];
+        eNetworkOrder[i] = eNetworkOrder[eLen - i - 1];
+        eNetworkOrder[eLen - i - 1] = temp;
+    }
     
-    int eLen = EVP_PKEY_bits(dhkey)/8;
-    RawByteArray *e = encodeMpint(pub_key_encoded, eLen);
+    RawByteArray *e = encodeMpint(eNetworkOrder, eLen);
 
-    // printf("public key (e)\n");
-    // printf("len of key: %zu\n", e -> size);
-    // for (int i = 0; i < e -> size; i++) {
-    //     printf("%02x ", e -> data[i]);
-    // }
-    // printf("\n");
+    printf("public key (e)\n");
+    printf("len of key: %zu\n", e -> size);
+    for (int i = 0; i < e -> size; i++) {
+        printf("%02x ", e -> data[i]);
+    }
+    printf("\n");
 
     unsigned char *buffer = malloc(e -> size + 1 + 4);
     buffer[0] = SSH_MSG_KEXDH_INIT;
-    uint32_t mpint_len_network_order = htonl(e->size);
-    memcpy(buffer + 1, &mpint_len_network_order, sizeof(uint32_t));
+    uint32_t mpintLenNetworkOrder = htonl(e->size);
+    memcpy(buffer + 1, &mpintLenNetworkOrder, sizeof(uint32_t));
     memcpy(buffer + 5, e -> data, e -> size);
     free(e -> data);
 
@@ -462,22 +458,22 @@ int sendDiffieHellmanExchange(int sock) {
 
     // // Convert f to a BIGNUM
     // BIGNUM *bn_f = BN_bin2bn(dhResponse -> f, dhResponse -> fLen, NULL);
-    BIGNUM *f_bn = BN_new();
-    BN_bin2bn(dhResponse -> f, dhResponse -> fLen, f_bn);
+    BIGNUM *fBN = BN_new();
+    BN_bin2bn(dhResponse -> f, dhResponse -> fLen, fBN);
 
-    EVP_PKEY_CTX *peer_ctx = NULL;
+    EVP_PKEY_CTX *peerCtx = NULL;
     EVP_PKEY *peerkey = NULL;
-    OSSL_PARAM peer_params[4];  // Add space for the peer's public key (f)
-    peer_ctx = EVP_PKEY_CTX_new_from_name(NULL, "DH", NULL);
+    OSSL_PARAM peerParams[4];  // Add space for the peer's public key (f)
+    peerCtx = EVP_PKEY_CTX_new_from_name(NULL, "DH", NULL);
 
     // Prepare the parameters for peer's public key
-    peer_params[0] = OSSL_PARAM_construct_BN("p", p_bin, p_size);  // Using the same `p_bin` and `p_size` as you used for generating your own DH key
-    peer_params[1] = OSSL_PARAM_construct_BN("g", g_bin, g_size);  // Using the same `g_bin` and `g_size`
-    peer_params[2] = OSSL_PARAM_construct_BN("pub", dhResponse -> f, dhResponse -> fLen); // Server's public key `f`
-    peer_params[3] = OSSL_PARAM_construct_end();  // End the array
+    peerParams[0] = OSSL_PARAM_construct_BN("p", pBin, pSize);  // Using the same `pBin` and `pSize` as you used for generating your own DH key
+    peerParams[1] = OSSL_PARAM_construct_BN("g", gBin, gSize);  // Using the same `gBin` and `gSize`
+    peerParams[2] = OSSL_PARAM_construct_BN("pub", dhResponse -> f, dhResponse -> fLen); // Server's public key `f`
+    peerParams[3] = OSSL_PARAM_construct_end();  // End the array
 
-    EVP_PKEY_fromdata_init(peer_ctx);
-    EVP_PKEY_fromdata(peer_ctx, &peerkey, EVP_PKEY_PUBLIC_KEY, peer_params);
+    EVP_PKEY_fromdata_init(peerCtx);
+    EVP_PKEY_fromdata(peerCtx, &peerkey, EVP_PKEY_PUBLIC_KEY, peerParams);
     
     printf("FFFFF:\n");
     for (int i = 0; i < dhResponse -> fLen; i++) {
@@ -486,7 +482,6 @@ int sendDiffieHellmanExchange(int sock) {
     printf("\n");
 
     // PRINTINg TO DEBUG
-    // out = BIO_new_fp(stdout, BIO_NOCLOSE);
     EVP_PKEY_print_public(out, peerkey, 0, NULL);
 
     // UTILITY FUNC COMMENTED OUT TO MAKE OUTPUT NICER
@@ -501,11 +496,11 @@ int sendDiffieHellmanExchange(int sock) {
     BIO_free(out);
     BN_free(p);
     BN_free(g);
-    OPENSSL_free(p_bin);
-    OPENSSL_free(g_bin);
-    OPENSSL_free(pub_key_encoded);
+    OPENSSL_free(pBin);
+    OPENSSL_free(gBin);
+    free(eNetworkOrder);
     // cleaning up importing f into a pkey struct
-    EVP_PKEY_CTX_free(peer_ctx);
+    EVP_PKEY_CTX_free(peerCtx);
     BN_free(f_bn);
     EVP_PKEY_free(peerkey);
     
