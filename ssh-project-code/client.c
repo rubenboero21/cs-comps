@@ -454,23 +454,21 @@ int sendDiffieHellmanExchange(int sock) {
 
     ServerDHResponse *dhResponse = extractServerDHResponse(serverResponse);
 
-    // BELOW HERE IS US TRYING TO IMPORT F INTO A PKEY
+    // importing f into a PKEY:
 
-    // // Convert f to a BIGNUM
-    // BIGNUM *bn_f = BN_bin2bn(dhResponse -> f, dhResponse -> fLen, NULL);
     BIGNUM *fBN = BN_new();
     BN_bin2bn(dhResponse -> f, dhResponse -> fLen, fBN);
 
     EVP_PKEY_CTX *peerCtx = NULL;
     EVP_PKEY *peerkey = NULL;
-    OSSL_PARAM peerParams[4];  // Add space for the peer's public key (f)
+    OSSL_PARAM peerParams[4];  // add space for the peer's public key (f)
     peerCtx = EVP_PKEY_CTX_new_from_name(NULL, "DH", NULL);
 
-    // Prepare the parameters for peer's public key
-    peerParams[0] = OSSL_PARAM_construct_BN("p", pBin, pSize);  // Using the same `pBin` and `pSize` as you used for generating your own DH key
-    peerParams[1] = OSSL_PARAM_construct_BN("g", gBin, gSize);  // Using the same `gBin` and `gSize`
-    peerParams[2] = OSSL_PARAM_construct_BN("pub", dhResponse -> f, dhResponse -> fLen); // Server's public key `f`
-    peerParams[3] = OSSL_PARAM_construct_end();  // End the array
+    // prepare the parameters for peer's public key
+    peerParams[0] = OSSL_PARAM_construct_BN("p", pBin, pSize);  
+    peerParams[1] = OSSL_PARAM_construct_BN("g", gBin, gSize); 
+    peerParams[2] = OSSL_PARAM_construct_BN("pub", dhResponse -> f, dhResponse -> fLen); 
+    peerParams[3] = OSSL_PARAM_construct_end(); 
 
     EVP_PKEY_fromdata_init(peerCtx);
     EVP_PKEY_fromdata(peerCtx, &peerkey, EVP_PKEY_PUBLIC_KEY, peerParams);
