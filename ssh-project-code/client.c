@@ -34,6 +34,8 @@ unsigned char *I_C;
 size_t I_C_length;
 unsigned char *I_S;
 size_t I_S_length;
+unsigned char *fGlobal;
+size_t fGlobalLen;
 
 // remember to free the struct AND data
 RawByteArray *constructPacket(RawByteArray *payload) {
@@ -243,20 +245,87 @@ RawByteArray* encodeMpint(const unsigned char* pub_key, int pub_key_len) {
     return mpintAndSize;
 }
 
-// WE NEED TO COMPUTE K BEFORE WE CAN VERIFY THE HOST
-/*
+// Function to compute the SHA-256 hash of a message and return it as a pointer to RawByteArray
+RawByteArray *computeSHA256Hash(const RawByteArray *inputMessage) {
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();  // Create a message digest context
+    const EVP_MD *md = EVP_sha256();       // Specify the SHA-256 algorithm
+    RawByteArray *outputHash = malloc(sizeof(RawByteArray));   // Allocate memory for output struct
+    unsigned int hashLength = 0;
 
-*/
-int verifyServerSignature(ServerDHResponse *dhResponse, const unsigned char *message, size_t message_len) {
+    if (mdctx == NULL || outputHash == NULL) {
+        printf("Error: Could not create digest context or allocate memory for output hash\n");
+        if (mdctx) EVP_MD_CTX_free(mdctx);  // Cleanup if context was allocated
+        if (outputHash) free(outputHash);   // Cleanup allocated memory if allocated
+        return NULL;
+    }
+
+    // Initialize the digest context for SHA-256
+    if (EVP_DigestInit_ex(mdctx, md, NULL) != 1) {
+        printf("Error: Could not initialize digest\n");
+        EVP_MD_CTX_free(mdctx);
+        free(outputHash);
+        return NULL;
+    }
+
+    // Add the input message to be hashed
+    if (EVP_DigestUpdate(mdctx, inputMessage->data, inputMessage->size) != 1) {
+        printf("Error: Could not update digest\n");
+        EVP_MD_CTX_free(mdctx);
+        free(outputHash);
+        return NULL;
+    }
+
+    // Allocate memory for the hash output
+    outputHash->data = (unsigned char *)malloc(EVP_MD_size(md));
+    if (outputHash->data == NULL) {
+        printf("Error: Could not allocate memory for output hash data\n");
+        EVP_MD_CTX_free(mdctx);
+        free(outputHash);
+        return NULL;
+    }
+
+    // Finalize the digest and store the result in outputHash->data
+    if (EVP_DigestFinal_ex(mdctx, outputHash->data, &hashLength) != 1) {
+        printf("Error: Could not finalize digest\n");
+        free(outputHash->data);  // Clean up allocated memory in case of failure
+        free(outputHash);
+        EVP_MD_CTX_free(mdctx);
+        return NULL;
+    }
+
+    // Set the size of the output hash
+    outputHash->size = hashLength;
+
+    // Clean up
+    EVP_MD_CTX_free(mdctx);
+
+    return outputHash;  // Return the pointer to the RawByteArray containing the hash
+}
+
+int verifyServerSignature(ServerDHResponse *dhResponse, RawByteArray *message) {
     EVP_PKEY *serverPublicKey = NULL;
     EVP_MD_CTX *mdctx = NULL;
     int ret = 0;
 
-    // Load the server's public key from dhResponse
-    const unsigned char *p = dhResponse->publicKey;
-    serverPublicKey = d2i_PUBKEY(NULL, &p, dhResponse->publicKeyLen);
+    // Debug: print the length of the public key and its content
+    // printf("Server public key length: %d\n", dhResponse->publicKeyLen);
+    // printf("Server public key data (hex): ");
+    // for (int i = 0; i < dhResponse->publicKeyLen; i++) {
+    //     printf("%02x ", dhResponse->publicKey[i]);
+    // }
+    // printf("\n");
+
+    // Load the server's EDDSA public key from raw byte array (assuming it's Ed25519)
+    serverPublicKey = EVP_PKEY_new_raw_public_key(EVP_PKEY_ED25519, NULL, dhResponse->publicKey, dhResponse->publicKeyLen);
     if (serverPublicKey == NULL) {
         printf("Error: Could not load server's public key\n");
+        goto cleanup;
+    }
+
+    // Check for Ed25519 key type
+    int keyType = EVP_PKEY_base_id(serverPublicKey);
+    if (keyType != EVP_PKEY_ED25519) {
+        printf("Error: serverPublicKey is not of type Ed25519\n");
         goto cleanup;
     }
 
@@ -267,62 +336,191 @@ int verifyServerSignature(ServerDHResponse *dhResponse, const unsigned char *mes
         goto cleanup;
     }
 
-    // Initialize the verification operation
-    if (EVP_DigestVerifyInit(mdctx, NULL, EVP_sha256(), NULL, serverPublicKey) != 1) {
+    // Initialize the verification operation for Ed25519 (no digest needed)
+    if (EVP_DigestVerifyInit(mdctx, NULL, NULL, NULL, serverPublicKey) != 1) {
         printf("Error: Could not initialize digest verify operation\n");
         goto cleanup;
     }
 
-    // Add the message that was signed (typically the client DH public key, server DH public key, and other data)
-    if (EVP_DigestVerifyUpdate(mdctx, message, message_len) != 1) {
-        printf("Error: Could not update digest with message\n");
-        goto cleanup;
+    // Debug: print the message data being verified
+    // printf("Message data (hex): ");
+    // for (int i = 0; i < message->size; i++) {
+    //     printf("%02x ", message->data[i]);
+    // }
+    // printf("\n");
+
+    // Debug: print the signature data being verified
+    // printf("Server signature length: %zu\n", dhResponse->hostSigDataLen - 4);
+    // printf("Server signature data (hex): ");
+    // for (int i = 4; i < dhResponse->hostSigDataLen; i++) {
+    //     printf("%02x ", dhResponse->hostSigData[i]);
+    // }
+    // printf("\n");
+
+    // guessing whats wrong: maybe endian-ness needs to be swapped
+    for (int i = 0; i < message -> size / 2; i++) {
+        unsigned char temp = message -> data[i];
+        message -> data[i] = message -> data[message -> size - i - 1];
+        message -> data[message -> size - i - 1] = temp;
     }
 
-    // Perform the verification using the server's signature
-    if (EVP_DigestVerifyFinal(mdctx, dhResponse->hostSigData, dhResponse->hostSigDataLen) == 1) {
+    // NEED TO HASH MESSAGE WITH SHA256 BEFORE TRYING TO VERIFY we think
+    RawByteArray *hashedMessage = computeSHA256Hash(message);
+    printf("HASHED MESSAGE:\n");
+    for (int i = 0; i < hashedMessage -> size; i++) {
+        printf("%02x ", hashedMessage -> data[i]);
+    }
+    printf("\n");
+
+
+    // Perform the verification using the server's signature (Ed25519 doesn't use DigestUpdate)
+    if (EVP_DigestVerify(mdctx, dhResponse->hostSigData + 4, dhResponse->hostSigDataLen - 4, hashedMessage -> data, hashedMessage -> size) == 1) {
         printf("Server's signature verified successfully!\n");
         ret = 1;  // Signature is valid
     } else {
         printf("Error: Server's signature verification failed\n");
     }
 
-    cleanup:
-        if (mdctx) EVP_MD_CTX_free(mdctx);
-        if (serverPublicKey) EVP_PKEY_free(serverPublicKey);
-        
-        return ret;
+    free(hashedMessage -> data);
+    free(hashedMessage);
+
+cleanup:
+    if (mdctx) EVP_MD_CTX_free(mdctx);
+    if (serverPublicKey) EVP_PKEY_free(serverPublicKey);
+
+    return ret;
 }
+
 
 // is it weird to only pass in half the variables we need, should we make all the variables we 
 // need global?
-// NEED TO ADD K TO THE FUNC PARAMS & FUNC BODY WHEN WE HAVE IT WORKING
-RawByteArray *concatenateVerificationMessage(unsigned char *K_S, size_t K_S_length, unsigned char *e, size_t eLen, unsigned char *f, size_t fLen) {
-    // remember to add K's len
-    int sum = V_C_length + V_S_length + I_C_length + I_S_length + K_S_length + eLen + fLen;
+RawByteArray *concatenateVerificationMessage(unsigned char *K_S, size_t K_S_length, unsigned char *e, size_t eLen, unsigned char *K, size_t K_length) {
+    int sum = V_C_length + V_S_length + I_C_length + I_S_length + K_S_length + eLen + fGlobalLen + K_length;
     unsigned char *message = malloc(sum);
     int offset = 0;
     memcpy(message, V_C, V_C_length);
+
+    printf("V_C: \n");
+    for (int i = offset; i < V_C_length + offset; i++) {
+        printf("%02x ", message[i]);
+    }
+    printf("\n");
+    
     offset += V_C_length;
     memcpy(message + offset, V_S, V_S_length);
+
+    printf("V_S: \n");
+    for (int i = offset; i < V_S_length + offset; i++) {
+        printf("%02x ", message[i]);
+    }
+    printf("\n");
+    
     offset += V_S_length;
     memcpy(message + offset, I_C, I_C_length);
+    
+    // 
+    printf("I_C: \n");
+    for (int i = offset; i < I_C_length + offset; i++) {
+        printf("%02x ", message[i]);
+    }
+    printf("\n");
+    
     offset += I_C_length;
     memcpy(message + offset, I_S, I_S_length);
+    
+    printf("I_S: \n");
+    for (int i = offset; i < I_S_length + offset; i++) {
+        printf("%02x ", message[i]);
+    }
+    printf("\n");
+    
     offset += I_S_length;
     memcpy(message + offset, K_S, K_S_length);
+
+    printf("K_S: \n");
+    for (int i = offset; i < K_S_length + offset; i++) {
+        printf("%02x ", message[i]);
+    }
+    printf("\n");
+
     offset += K_S_length;
     memcpy(message + offset, e, eLen);
+
+    printf("E: \n");
+    for (int i = offset; i < eLen + offset; i++) {
+        printf("%02x ", message[i]);
+    }
+    printf("\n");
+
     offset += eLen;
-    memcpy(message + offset, f, fLen);
-    offset += fLen;
-    // memcpy(message + offset, K, KLen);
+    memcpy(message + offset, fGlobal, fGlobalLen);
+
+    printf("F: \n");
+    for (int i = offset; i < fGlobalLen + offset; i++) {
+        printf("%02x ", message[i]);
+    }
+    printf("\n");
+
+    offset += fGlobalLen;
+    memcpy(message + offset, K, K_length);
+
+    printf("K: \n");
+    for (int i = offset; i < K_length + offset; i++) {
+        printf("%02x ", message[i]);
+    }
+    printf("\n");
 
     RawByteArray *messageAndSize = malloc(sizeof(RawByteArray));
     messageAndSize -> data = message;
     messageAndSize -> size = sum;
 
     return messageAndSize;
+}
+
+RawByteArray *generateSharedKey(EVP_PKEY *pkey, EVP_PKEY *peerkey) {
+    RawByteArray *sharedKey = malloc(sizeof(RawByteArray));
+    assert(sharedKey != NULL); 
+
+    EVP_PKEY_CTX *ctx;
+    unsigned char *skey;
+    size_t skeylen;
+
+    // Initialize context
+    ctx = EVP_PKEY_CTX_new(pkey, NULL);
+
+    // Initialize derivation
+    EVP_PKEY_derive_init(ctx);
+
+    // Set peer's public key
+    EVP_PKEY_derive_set_peer(ctx, peerkey);
+
+    // Determine buffer length for shared secret
+    EVP_PKEY_derive(ctx, NULL, &skeylen);
+
+    // Allocate memory for shared secret
+    skey = OPENSSL_malloc(skeylen);
+    assert(skey != NULL);
+
+    // Derive the shared secret
+    EVP_PKEY_derive(ctx, skey, &skeylen);
+
+    // Debugging output
+    // printf("skeylen: %zu\n", skeylen);
+    // printf("SHARED KEY!!\n");
+    // for (int i = 0; i < skeylen; i++) {
+    //     printf("%02x ", skey[i]);
+    // }
+    // printf("\n");
+
+    // Store the shared secret
+    sharedKey->data = skey;
+    sharedKey->size = skeylen;
+
+    // Clean up
+    EVP_PKEY_CTX_free(ctx);
+
+    // will need to use OPENSSL free on sharedKey -> data since OSSL malloc is used to create it
+    return sharedKey;
 }
 
 /*
@@ -334,7 +532,7 @@ gcc <file name> -I<path to openssl install>/include -L<path to openssl install>/
 int sendDiffieHellmanExchange(int sock) {
     // init all variables that will need to be freed
     EVP_PKEY_CTX *pctx = NULL, *kctx = NULL, *peerCtx = NULL;
-    EVP_PKEY *params = NULL, *dhkey = NULL, *peerkey = NULL;
+    EVP_PKEY *params = NULL, *clientKey = NULL, *peerkey = NULL;
     BIO *out = NULL;
     BIGNUM *p = NULL, *g = NULL, *eBN = NULL, *fBN = NULL;
     OSSL_PARAM dhParams[3];
@@ -376,10 +574,10 @@ int sendDiffieHellmanExchange(int sock) {
     // generate a new DH key
     kctx = EVP_PKEY_CTX_new(params, NULL);
     EVP_PKEY_keygen_init(kctx);
-    EVP_PKEY_keygen(kctx, &dhkey);
+    EVP_PKEY_keygen(kctx, &clientKey);
 
     // extract the public key BIGNUM
-    EVP_PKEY_get_bn_param(dhkey, "pub", &eBN);
+    EVP_PKEY_get_bn_param(clientKey, "pub", &eBN);
 
     int eLen = BN_num_bytes(eBN);  // get the length of the public key in bytes
     eNetworkOrder = (unsigned char *)malloc(eLen);
@@ -410,8 +608,8 @@ int sendDiffieHellmanExchange(int sock) {
 
     /* Optional: Print the private key */
     out = BIO_new_fp(stdout, BIO_NOCLOSE);
-    if (out && dhkey) {
-        EVP_PKEY_print_private(out, dhkey, 0, NULL);
+    if (out && clientKey) {
+        EVP_PKEY_print_private(out, clientKey, 0, NULL);
     }
 
     payload = malloc(sizeof(RawByteArray));
@@ -447,7 +645,28 @@ int sendDiffieHellmanExchange(int sock) {
 
     ServerDHResponse *dhResponse = extractServerDHResponse(serverResponse);
 
+    // need to store the f from server as global bc OSSL doesnt like the leading 2s complement bit, so we remove it for use within OSSL stuff
+    fGlobal = malloc(dhResponse -> fLen);
+    memcpy(fGlobal, dhResponse -> f, dhResponse -> fLen);
+    fGlobalLen = dhResponse -> fLen;
+
     // importing f into a PKEY:
+    
+    // If the first byte of f is 0x00 and the length is 257, strip the leading byte.
+    // OSSL gets angry in key agreement if there is a leading byte
+    if (dhResponse->fLen == 257 && dhResponse->f[0] == 0x00) {
+        // Create a new buffer to store the adjusted public key
+        unsigned char *adjustedF = malloc(dhResponse->fLen - 1);
+        assert(adjustedF != NULL); // Check for allocation failure
+
+        // Copy the data without the leading zero
+        memcpy(adjustedF, dhResponse -> f + 1, dhResponse -> fLen - 1);
+
+        // Update the pointer and length
+        free(dhResponse -> f); // Free the old buffer if you dynamically allocated it
+        dhResponse -> f = adjustedF; // Point to the new buffer
+        dhResponse -> fLen -= 1; // Adjust the length
+    }
 
     fBN = BN_new();
     BN_bin2bn(dhResponse -> f, dhResponse -> fLen, fBN);
@@ -472,6 +691,15 @@ int sendDiffieHellmanExchange(int sock) {
     // PRINTINg TO DEBUG
     EVP_PKEY_print_public(out, peerkey, 0, NULL);
 
+    // still need to store the output, or memory leak - remember to use OSSL free for data variable
+    RawByteArray *k = generateSharedKey(clientKey, peerkey);
+
+    RawByteArray *verificationMessage = concatenateVerificationMessage(dhResponse -> publicKey, dhResponse -> publicKeyLen, e -> data, e -> size, k -> data, k -> size);
+
+    
+
+    verifyServerSignature(dhResponse, verificationMessage);
+
     // UTILITY FUNC COMMENTED OUT TO MAKE OUTPUT NICER
     // printServerDHResponse(serverResponse);
 
@@ -480,7 +708,7 @@ int sendDiffieHellmanExchange(int sock) {
     EVP_PKEY_CTX_free(kctx);
     EVP_PKEY_CTX_free(peerCtx);
     EVP_PKEY_free(params);
-    EVP_PKEY_free(dhkey);
+    EVP_PKEY_free(clientKey);
     EVP_PKEY_free(peerkey);
     BIO_free(out);
     BN_free(p);
@@ -499,6 +727,10 @@ int sendDiffieHellmanExchange(int sock) {
     free(packet -> data);
     free(packet);
     cleanupServerDHResponse(dhResponse);
+    OPENSSL_free(k -> data);
+    free(k);
+    free(verificationMessage -> data);
+    free(verificationMessage);
     
     return 0;
 }
@@ -748,6 +980,6 @@ int main(int argc, char **argv) {
     free(V_S);
     free(I_C);
     free(I_S);
-
+    free(fGlobal);
     return 0;
 }
