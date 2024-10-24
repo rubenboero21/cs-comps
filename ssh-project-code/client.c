@@ -332,13 +332,16 @@ gcc client.c -I/opt/homebrew/opt/openssl@3/include -L/opt/homebrew/opt/openssl@3
 gcc <file name> -I<path to openssl install>/include -L<path to openssl install>/lib -lssl -lcrypto
 */
 int sendDiffieHellmanExchange(int sock) {
-    EVP_PKEY_CTX *pctx = NULL, *kctx = NULL;
-    EVP_PKEY *params = NULL, *dhkey = NULL;
+    // init all variables that will need to be freed
+    EVP_PKEY_CTX *pctx = NULL, *kctx = NULL, *peerCtx = NULL;
+    EVP_PKEY *params = NULL, *dhkey = NULL, *peerkey = NULL;
     BIO *out = NULL;
-    BIGNUM *p = NULL, *g = NULL;
+    BIGNUM *p = NULL, *g = NULL, *eBN = NULL, *fBN = NULL;
     OSSL_PARAM dhParams[3];
-    unsigned char *pBin = NULL, *gBin = NULL;
+    OSSL_PARAM peerParams[4];
+    unsigned char *pBin = NULL, *gBin = NULL, *eNetworkOrder = NULL, *buffer = NULL, *serverResponse = NULL;
     int pSize = 0, gSize = 0;
+    RawByteArray *e = NULL, *payload = NULL, *packet = NULL;
 
     // create group 14 parameters with bignum
     p = BN_new();
@@ -376,15 +379,12 @@ int sendDiffieHellmanExchange(int sock) {
     EVP_PKEY_keygen(kctx, &dhkey);
 
     // extract the public key BIGNUM
-    BIGNUM *eBN = NULL;
     EVP_PKEY_get_bn_param(dhkey, "pub", &eBN);
 
     int eLen = BN_num_bytes(eBN);  // get the length of the public key in bytes
-    unsigned char *eNetworkOrder = (unsigned char *)malloc(eLen);
+    eNetworkOrder = (unsigned char *)malloc(eLen);
 
     BN_bn2bin(eBN, eNetworkOrder);
-
-    BN_free(eBN);
 
     // swap endian-ness from little-endian to big-endian
     for (int i = 0; i < eLen / 2; i++) {
@@ -393,7 +393,7 @@ int sendDiffieHellmanExchange(int sock) {
         eNetworkOrder[eLen - i - 1] = temp;
     }
     
-    RawByteArray *e = encodeMpint(eNetworkOrder, eLen);
+    e = encodeMpint(eNetworkOrder, eLen);
 
     printf("public key (e)\n");
     printf("len of key: %zu\n", e -> size);
@@ -402,12 +402,11 @@ int sendDiffieHellmanExchange(int sock) {
     }
     printf("\n");
 
-    unsigned char *buffer = malloc(e -> size + 1 + 4);
+    buffer = malloc(e -> size + 1 + 4);
     buffer[0] = SSH_MSG_KEXDH_INIT;
     uint32_t mpintLenNetworkOrder = htonl(e->size);
     memcpy(buffer + 1, &mpintLenNetworkOrder, sizeof(uint32_t));
     memcpy(buffer + 5, e -> data, e -> size);
-    free(e -> data);
 
     /* Optional: Print the private key */
     out = BIO_new_fp(stdout, BIO_NOCLOSE);
@@ -415,21 +414,15 @@ int sendDiffieHellmanExchange(int sock) {
         EVP_PKEY_print_private(out, dhkey, 0, NULL);
     }
 
-    RawByteArray *payload = malloc(sizeof(RawByteArray));
+    payload = malloc(sizeof(RawByteArray));
     assert(payload != NULL);
 
     payload -> data = buffer;
     payload -> size = e -> size + 1 + 4; // +1 for message code, +4 for mpint len
-    free(e);
 
-    RawByteArray *packet = constructPacket(payload);
-    free(payload);
+    packet = constructPacket(payload);
 
     int sentBytes = send(sock, packet -> data, packet -> size, 0);
-    free(buffer);
-    // still need to free packet data even though we malloced data
-    free(packet -> data);
-    free(packet);
 
     if (sentBytes != -1) {
         printf("Successful DH init send! Number of bytes sent: %i\n", sentBytes);
@@ -437,7 +430,7 @@ int sendDiffieHellmanExchange(int sock) {
         printf("Send did not complete successfully.\n");
     }
     
-    unsigned char serverResponse[BUFFER_SIZE];
+    serverResponse = malloc(BUFFER_SIZE);
     memset(serverResponse, 0, BUFFER_SIZE);  // Clear the buffer    
     ssize_t bytesReceived = recv(sock, serverResponse, BUFFER_SIZE, 0);
     
@@ -456,12 +449,9 @@ int sendDiffieHellmanExchange(int sock) {
 
     // importing f into a PKEY:
 
-    BIGNUM *fBN = BN_new();
+    fBN = BN_new();
     BN_bin2bn(dhResponse -> f, dhResponse -> fLen, fBN);
 
-    EVP_PKEY_CTX *peerCtx = NULL;
-    EVP_PKEY *peerkey = NULL;
-    OSSL_PARAM peerParams[4];  // add space for the peer's public key (f)
     peerCtx = EVP_PKEY_CTX_new_from_name(NULL, "DH", NULL);
 
     // prepare the parameters for peer's public key
@@ -485,22 +475,30 @@ int sendDiffieHellmanExchange(int sock) {
     // UTILITY FUNC COMMENTED OUT TO MAKE OUTPUT NICER
     // printServerDHResponse(serverResponse);
 
-    /* Cleanup */
-    cleanupServerDHResponse(dhResponse);
+    // cleanup
     EVP_PKEY_CTX_free(pctx);
     EVP_PKEY_CTX_free(kctx);
+    EVP_PKEY_CTX_free(peerCtx);
     EVP_PKEY_free(params);
     EVP_PKEY_free(dhkey);
+    EVP_PKEY_free(peerkey);
     BIO_free(out);
     BN_free(p);
     BN_free(g);
+    BN_free(eBN);
+    BN_free(fBN);
     OPENSSL_free(pBin);
     OPENSSL_free(gBin);
     free(eNetworkOrder);
-    // cleaning up importing f into a pkey struct
-    EVP_PKEY_CTX_free(peerCtx);
-    BN_free(f_bn);
-    EVP_PKEY_free(peerkey);
+    free(buffer);
+    free(serverResponse);
+    free(e -> data);
+    free(e);
+    free(payload);
+    // still need to free packet data even though we malloced data
+    free(packet -> data);
+    free(packet);
+    cleanupServerDHResponse(dhResponse);
     
     return 0;
 }
