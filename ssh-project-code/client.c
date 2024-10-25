@@ -36,6 +36,8 @@ unsigned char *I_S;
 size_t I_S_length;
 unsigned char *fGlobal;
 size_t fGlobalLen;
+unsigned char *eGlobal;
+size_t eGlobalLen;
 
 // swaps the endian-ness of a string of characters
 unsigned char *swapEndianNess(unsigned char *message, size_t size) {
@@ -403,8 +405,8 @@ cleanup:
 
 // is it weird to only pass in half the variables we need, should we make all the variables we 
 // need global?
-RawByteArray *concatenateVerificationMessage(unsigned char *K_S, size_t K_S_length, unsigned char *e, size_t eLen, unsigned char *K, size_t K_length) {
-    int sum = V_C_length + V_S_length + I_C_length + I_S_length + K_S_length + eLen + fGlobalLen + K_length;
+RawByteArray *concatenateVerificationMessage(unsigned char *K_S, size_t K_S_length, unsigned char *K, size_t K_length) {
+    int sum = V_C_length + V_S_length + I_C_length + I_S_length + K_S_length + eGlobalLen + fGlobalLen + K_length;
     unsigned char *message = malloc(sum);
     int offset = 0;
     memcpy(message, V_C, V_C_length);
@@ -453,15 +455,15 @@ RawByteArray *concatenateVerificationMessage(unsigned char *K_S, size_t K_S_leng
     printf("\n");
 
     offset += K_S_length;
-    memcpy(message + offset, e, eLen);
+    memcpy(message + offset, eGlobal, eGlobalLen);
 
     printf("E: \n");
-    for (int i = offset; i < eLen + offset; i++) {
+    for (int i = offset; i < eGlobalLen + offset; i++) {
         printf("%02x ", message[i]);
     }
     printf("\n");
 
-    offset += eLen;
+    offset += eGlobalLen;
     memcpy(message + offset, fGlobal, fGlobalLen);
 
     printf("F: \n");
@@ -594,11 +596,6 @@ int sendDiffieHellmanExchange(int sock) {
     BN_bn2bin(eBN, eNetworkOrder);
 
     // swap endian-ness from little-endian to big-endian
-    // for (int i = 0; i < eLen / 2; i++) {
-    //     unsigned char temp = eNetworkOrder[i];
-    //     eNetworkOrder[i] = eNetworkOrder[eLen - i - 1];
-    //     eNetworkOrder[eLen - i - 1] = temp;
-    // }
     eNetworkOrder = swapEndianNess(eNetworkOrder, eLen);
     
     e = encodeMpint(eNetworkOrder, eLen);
@@ -610,11 +607,18 @@ int sendDiffieHellmanExchange(int sock) {
     }
     printf("\n");
 
+    // building e payload (including prepending size to mpint)
     buffer = malloc(e -> size + 1 + 4);
     buffer[0] = SSH_MSG_KEXDH_INIT;
     uint32_t mpintLenNetworkOrder = htonl(e->size);
     memcpy(buffer + 1, &mpintLenNetworkOrder, sizeof(uint32_t));
     memcpy(buffer + 5, e -> data, e -> size);
+
+    // store a global copy of e for use in message verification
+    eGlobal = malloc(e -> size + sizeof(uint32_t));
+    memcpy(eGlobal, &mpintLenNetworkOrder, sizeof(uint32_t));
+    memcpy(eGlobal + sizeof(uint32_t), e -> data, e -> size);
+    eGlobalLen = e -> size + sizeof(uint32_t);
 
     /* Optional: Print the private key */
     out = BIO_new_fp(stdout, BIO_NOCLOSE);
@@ -704,7 +708,7 @@ int sendDiffieHellmanExchange(int sock) {
     // still need to store the output, or memory leak - remember to use OSSL free for data variable
     RawByteArray *k = generateSharedKey(clientKey, peerkey);
 
-    RawByteArray *verificationMessage = concatenateVerificationMessage(dhResponse -> publicKey, dhResponse -> publicKeyLen, e -> data, e -> size, k -> data, k -> size);
+    RawByteArray *verificationMessage = concatenateVerificationMessage(dhResponse -> publicKey, dhResponse -> publicKeyLen, k -> data, k -> size);
 
     
 
@@ -883,9 +887,9 @@ int sendKexInit (int sock) {
     RawByteArray *packet = constructPacket(payload);
 
     // save globally for use later in sendDiffieHellmanExchange()
-    I_C = malloc(packet -> size);
-    memcpy(I_C, packet -> data, packet -> size);
-    I_C_length = packet -> size;
+    I_C = malloc(payload -> size - 1); // dont want to include the message type byte
+    memcpy(I_C, payload -> data + 1, payload -> size - 1);
+    I_C_length = payload -> size - 1;
     
     // printing for debugging:
     // printf("PACKET:\n");
@@ -921,9 +925,16 @@ int sendKexInit (int sock) {
     } else {
         printf("No server response received :(\n");
     }
-    I_S = malloc(bytes_received);
-    memcpy(I_S, buffer, bytes_received);
-    I_S_length = bytes_received;
+
+    uint32_t hostPacketLen = (buffer[0] << 24) | (buffer[1] << 16) | (buffer[2] << 8) | buffer[3];
+    uint32_t hostPadLen = buffer[4];
+    printf("packet len: %u | host pad len: %u\n", hostPacketLen, hostPadLen);
+
+    uint32_t size = hostPacketLen - hostPadLen - 1 - 1; // -1 for message code byte, -1 for padding size byte
+
+    I_S = malloc(size); 
+    memcpy(I_S, buffer + 6, size);
+    I_S_length = size;
 
     return 0;
 }
