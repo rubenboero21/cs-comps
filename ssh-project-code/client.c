@@ -37,6 +37,17 @@ size_t I_S_length;
 unsigned char *fGlobal;
 size_t fGlobalLen;
 
+// swaps the endian-ness of a string of characters
+unsigned char *swapEndianNess(unsigned char *message, size_t size) {
+    for (int i = 0; i < size / 2; i++) {
+        unsigned char temp = message[i];
+        message[i] = message[size - i - 1];
+        message[size - i - 1] = temp;
+    }
+    
+    return message;
+}
+
 // remember to free the struct AND data
 RawByteArray *constructPacket(RawByteArray *payload) {
     
@@ -124,8 +135,11 @@ ServerDHResponse *extractServerDHResponse(unsigned char* payload) {
     serverResponse -> hostSigType = hostSigType;
     offset += hostSigTypeLen;
 
-    size_t hostSigDataLen = hostSigLen - hostSigTypeLen - sizeof(uint32_t);
+    // size_t hostSigDataLen = hostSigLen - hostSigTypeLen - sizeof(uint32_t);
+    uint32_t hostSigDataLen = (payload[offset] << 24) | (payload[offset + 1] << 16) | (payload[offset + 2] << 8) | payload[offset + 3];
     serverResponse -> hostSigDataLen = hostSigDataLen;
+    offset += 4;
+    // serverResponse -> hostSigDataLen = hostSigDataLen;
 
     unsigned char *hostSigData = malloc(hostSigDataLen);
     memcpy(hostSigData, payload + offset, hostSigDataLen);
@@ -358,11 +372,7 @@ int verifyServerSignature(ServerDHResponse *dhResponse, RawByteArray *message) {
     // printf("\n");
 
     // guessing whats wrong: maybe endian-ness needs to be swapped
-    for (int i = 0; i < message -> size / 2; i++) {
-        unsigned char temp = message -> data[i];
-        message -> data[i] = message -> data[message -> size - i - 1];
-        message -> data[message -> size - i - 1] = temp;
-    }
+    message -> data = swapEndianNess(message -> data, message -> size);
 
     // NEED TO HASH MESSAGE WITH SHA256 BEFORE TRYING TO VERIFY we think
     RawByteArray *hashedMessage = computeSHA256Hash(message);
@@ -372,9 +382,8 @@ int verifyServerSignature(ServerDHResponse *dhResponse, RawByteArray *message) {
     }
     printf("\n");
 
-
     // Perform the verification using the server's signature (Ed25519 doesn't use DigestUpdate)
-    if (EVP_DigestVerify(mdctx, dhResponse->hostSigData + 4, dhResponse->hostSigDataLen - 4, hashedMessage -> data, hashedMessage -> size) == 1) {
+    if (EVP_DigestVerify(mdctx, dhResponse->hostSigData, dhResponse->hostSigDataLen, hashedMessage -> data, hashedMessage -> size) == 1) {
         printf("Server's signature verified successfully!\n");
         ret = 1;  // Signature is valid
     } else {
@@ -585,11 +594,12 @@ int sendDiffieHellmanExchange(int sock) {
     BN_bn2bin(eBN, eNetworkOrder);
 
     // swap endian-ness from little-endian to big-endian
-    for (int i = 0; i < eLen / 2; i++) {
-        unsigned char temp = eNetworkOrder[i];
-        eNetworkOrder[i] = eNetworkOrder[eLen - i - 1];
-        eNetworkOrder[eLen - i - 1] = temp;
-    }
+    // for (int i = 0; i < eLen / 2; i++) {
+    //     unsigned char temp = eNetworkOrder[i];
+    //     eNetworkOrder[i] = eNetworkOrder[eLen - i - 1];
+    //     eNetworkOrder[eLen - i - 1] = temp;
+    // }
+    eNetworkOrder = swapEndianNess(eNetworkOrder, eLen);
     
     e = encodeMpint(eNetworkOrder, eLen);
 
@@ -817,9 +827,10 @@ int sendProtocol(int sock) {
     int sentBytes = send(sock, protocol, strlen(protocol), 0);
 
     // save client protocol globally for use in sendDiffieHellmanExchange()
-    V_C = malloc(strlen(protocol));
-    strcpy((char *)V_C, protocol);
-    V_C_length = strlen(protocol);
+    V_C = malloc(strlen(protocol) - (2 * sizeof(char))); // dont want to include carriage return or new line
+    memcpy(V_C, protocol, strlen(protocol) - (2 * sizeof(char)));
+    // strcpy((char *)V_C, protocol);
+    V_C_length = strlen(protocol) - (2 * sizeof(char));
 
     if (sentBytes != -1) {
         printf("Successful protocol send! Number of protocol bytes sent: %i\n", sentBytes);
@@ -830,9 +841,9 @@ int sendProtocol(int sock) {
     ssize_t bytesReceived = recv(sock, buffer, BUFFER_SIZE, 0);
     
     // save server protocol globally for use in sendDiffieHellmanExchange()
-    V_S = malloc(bytesReceived);
-    memcpy(V_S, buffer, bytesReceived);
-    V_S_length = bytesReceived;
+    V_S = malloc(bytesReceived - (2 * sizeof(char)));
+    memcpy(V_S, buffer, bytesReceived - (2 * sizeof(char)));
+    V_S_length = bytesReceived - (2 * sizeof(char));
 
     if (bytesReceived > 0) {
         printf("server protocol: %s", buffer);
