@@ -242,7 +242,8 @@ void printServerDHResponse(unsigned char* payload) {
 }
 
 // Adds the leading 2s complement bit if necessary to ensure that e is positive
-RawByteArray* encodeMpint(const unsigned char* pub_key, int pub_key_len) {
+// remember to free returned rawbytearray data, and then rawbytearray itself
+RawByteArray* addTwosComplementBit(const unsigned char* pub_key, int pub_key_len) {
     int needs_padding = (pub_key[0] & 0x80) != 0;
     int mpint_len = pub_key_len + (needs_padding ? 1 : 0);
     
@@ -374,7 +375,7 @@ int verifyServerSignature(ServerDHResponse *dhResponse, RawByteArray *message) {
     // printf("\n");
 
     // guessing whats wrong: maybe endian-ness needs to be swapped
-    message -> data = swapEndianNess(message -> data, message -> size);
+    // message -> data = swapEndianNess(message -> data, message -> size);
 
     // NEED TO HASH MESSAGE WITH SHA256 BEFORE TRYING TO VERIFY we think
     RawByteArray *hashedMessage = computeSHA256Hash(message);
@@ -516,12 +517,12 @@ RawByteArray *generateSharedKey(EVP_PKEY *pkey, EVP_PKEY *peerkey) {
     EVP_PKEY_derive(ctx, skey, &skeylen);
 
     // Debugging output
-    // printf("skeylen: %zu\n", skeylen);
-    // printf("SHARED KEY!!\n");
-    // for (int i = 0; i < skeylen; i++) {
-    //     printf("%02x ", skey[i]);
-    // }
-    // printf("\n");
+    printf("skeylen: %zu\n", skeylen);
+    printf("SHARED KEY!!\n");
+    for (int i = 0; i < skeylen; i++) {
+        printf("%02x ", skey[i]);
+    }
+    printf("\n");
 
     // Store the shared secret
     sharedKey->data = skey;
@@ -598,7 +599,7 @@ int sendDiffieHellmanExchange(int sock) {
     // swap endian-ness from little-endian to big-endian
     eNetworkOrder = swapEndianNess(eNetworkOrder, eLen);
     
-    e = encodeMpint(eNetworkOrder, eLen);
+    e = addTwosComplementBit(eNetworkOrder, eLen);
 
     printf("public key (e)\n");
     printf("len of key: %zu\n", e -> size);
@@ -660,9 +661,11 @@ int sendDiffieHellmanExchange(int sock) {
     ServerDHResponse *dhResponse = extractServerDHResponse(serverResponse);
 
     // need to store the f from server as global bc OSSL doesnt like the leading 2s complement bit, so we remove it for use within OSSL stuff
-    fGlobal = malloc(dhResponse -> fLen);
-    memcpy(fGlobal, dhResponse -> f, dhResponse -> fLen);
-    fGlobalLen = dhResponse -> fLen;
+    fGlobal = malloc(dhResponse -> fLen + sizeof(uint32_t));
+    mpintLenNetworkOrder = htonl(dhResponse -> fLen);
+    memcpy(fGlobal, &mpintLenNetworkOrder, sizeof(uint32_t));
+    memcpy(fGlobal + sizeof(uint32_t), dhResponse -> f, dhResponse -> fLen);
+    fGlobalLen = dhResponse -> fLen + sizeof(uint32_t);
 
     // importing f into a PKEY:
     
@@ -708,9 +711,21 @@ int sendDiffieHellmanExchange(int sock) {
     // still need to store the output, or memory leak - remember to use OSSL free for data variable
     RawByteArray *k = generateSharedKey(clientKey, peerkey);
 
-    RawByteArray *verificationMessage = concatenateVerificationMessage(dhResponse -> publicKey, dhResponse -> publicKeyLen, k -> data, k -> size);
+    // formatting k to be in mpint format
+    // SWAP ENDIAN-NESS OF K HERE MAYBE
+    // unsigned char *swappedData = swapEndianNess(k -> data, k -> size);
+    // RawByteArray *twosK = addTwosComplementBit(swappedData, k -> size);
 
-    
+    RawByteArray *twosK = addTwosComplementBit(k -> data, k -> size);
+    RawByteArray *mpintK = malloc(sizeof(RawByteArray));
+    unsigned char *mpintKdata = malloc(twosK -> size + sizeof(uint32_t));
+    mpintLenNetworkOrder = htonl(twosK -> size);
+    memcpy(mpintKdata, &mpintLenNetworkOrder, sizeof(uint32_t));
+    memcpy(mpintKdata + sizeof(uint32_t), twosK -> data, twosK -> size);
+    mpintK -> data = mpintKdata;
+    mpintK -> size = twosK -> size + sizeof(uint32_t);
+
+    RawByteArray *verificationMessage = concatenateVerificationMessage(dhResponse -> publicKey, dhResponse -> publicKeyLen, mpintK -> data, mpintK -> size);
 
     verifyServerSignature(dhResponse, verificationMessage);
 
@@ -743,6 +758,10 @@ int sendDiffieHellmanExchange(int sock) {
     cleanupServerDHResponse(dhResponse);
     OPENSSL_free(k -> data);
     free(k);
+    free(twosK -> data);
+    free(twosK);
+    free(mpintK -> data);
+    free(mpintK);
     free(verificationMessage -> data);
     free(verificationMessage);
     
