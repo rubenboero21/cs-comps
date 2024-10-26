@@ -1003,5 +1003,6 @@ int main(int argc, char **argv) {
     free(I_C);
     free(I_S);
     free(fGlobal);
+    free(eGlobal);
     return 0;
 }
