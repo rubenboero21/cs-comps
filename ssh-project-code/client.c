@@ -385,6 +385,8 @@ int verifyServerSignature(ServerDHResponse *dhResponse, RawByteArray *message) {
     }
     printf("\n");
 
+    
+
     // Perform the verification using the server's signature (Ed25519 doesn't use DigestUpdate)
     if (EVP_DigestVerify(mdctx, dhResponse->hostSigData, dhResponse->hostSigDataLen, hashedMessage -> data, hashedMessage -> size) == 1) {
         printf("Server's signature verified successfully!\n");
@@ -656,6 +658,8 @@ int sendDiffieHellmanExchange(int sock) {
         // printf("\n");
     } else {
         printf("No server DH response recieved :(\n");
+        // random error message code
+        exit(1);
     }
 
     ServerDHResponse *dhResponse = extractServerDHResponse(serverResponse);
