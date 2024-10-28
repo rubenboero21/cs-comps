@@ -17,7 +17,7 @@ typedef struct {
     uint32_t hostSigLen;
     uint32_t hostSigTypeLen;
     unsigned char *hostSigType;
-    size_t hostSigDataLen; // this is not part of the actual packet, we calculate it
+    size_t hostSigDataLen;
     unsigned char *hostSigData; 
 } ServerDHResponse;
 
