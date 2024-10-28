@@ -408,8 +408,8 @@ cleanup:
 
 // is it weird to only pass in half the variables we need, should we make all the variables we 
 // need global?
-RawByteArray *concatenateVerificationMessage(unsigned char *K_S, size_t K_S_length, unsigned char *K, size_t K_length) {
-    int sum = V_C_length + V_S_length + I_C_length + I_S_length + K_S_length + eGlobalLen + fGlobalLen + K_length;
+RawByteArray *concatenateVerificationMessage(unsigned char *keyType, size_t keyTypeLen, unsigned char *pubKey, size_t pubKeyLen, unsigned char *K, size_t K_length) {
+    int sum = V_C_length + V_S_length + I_C_length + I_S_length + keyTypeLen + pubKeyLen + eGlobalLen + fGlobalLen + K_length;
     unsigned char *message = malloc(sum);
     int offset = 0;
     memcpy(message, V_C, V_C_length);
@@ -432,7 +432,6 @@ RawByteArray *concatenateVerificationMessage(unsigned char *K_S, size_t K_S_leng
     offset += V_S_length;
     memcpy(message + offset, I_C, I_C_length);
     
-    // 
     printf("I_C: \n");
     for (int i = offset; i < I_C_length + offset; i++) {
         printf("%02x ", message[i]);
@@ -447,17 +446,28 @@ RawByteArray *concatenateVerificationMessage(unsigned char *K_S, size_t K_S_leng
         printf("%02x ", message[i]);
     }
     printf("\n");
-    
+
     offset += I_S_length;
-    memcpy(message + offset, K_S, K_S_length);
+
+    int temp = offset;
+    uint32_t networkKeyTypeLen = htonl(keyTypeLen);
+    memcpy(message + offset, &networkKeyTypeLen, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+    memcpy(message + offset, keyType, keyTypeLen);
+    offset += keyTypeLen;
+
+    uint32_t networkPubKeyLen = htonl(pubKeyLen);
+    memcpy(message + offset, &networkPubKeyLen, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+    memcpy(message + offset, pubKey, pubKeyLen);
+    offset += pubKeyLen;
 
     printf("K_S: \n");
-    for (int i = offset; i < K_S_length + offset; i++) {
+    for (int i = temp; i < offset; i++) {
         printf("%02x ", message[i]);
     }
     printf("\n");
 
-    offset += K_S_length;
     memcpy(message + offset, eGlobal, eGlobalLen);
 
     printf("E: \n");
@@ -729,7 +739,7 @@ int sendDiffieHellmanExchange(int sock) {
     mpintK -> data = mpintKdata;
     mpintK -> size = twosK -> size + sizeof(uint32_t);
 
-    RawByteArray *verificationMessage = concatenateVerificationMessage(dhResponse -> publicKey, dhResponse -> publicKeyLen, mpintK -> data, mpintK -> size);
+    RawByteArray *verificationMessage = concatenateVerificationMessage(dhResponse -> hostKeyType, dhResponse -> hostKeyTypeLen, dhResponse -> publicKey, dhResponse -> publicKeyLen, mpintK -> data, mpintK -> size);
 
     verifyServerSignature(dhResponse, verificationMessage);
 
@@ -854,10 +864,12 @@ int sendProtocol(int sock) {
     int sentBytes = send(sock, protocol, strlen(protocol), 0);
 
     // save client protocol globally for use in sendDiffieHellmanExchange()
-    V_C = malloc(strlen(protocol) - (2 * sizeof(char))); // dont want to include carriage return or new line
-    memcpy(V_C, protocol, strlen(protocol) - (2 * sizeof(char)));
+    V_C = malloc(strlen(protocol) + sizeof(uint32_t) - (2 * sizeof(char))); // dont want to include carriage return or new line
+    uint32_t networkProtocolLen = htonl(strlen(protocol) - 2); // -2 for /r & /n
+    memcpy(V_C, &networkProtocolLen, sizeof(uint32_t));
+    memcpy(V_C + sizeof(uint32_t), protocol, strlen(protocol) - (2 * sizeof(char)));
     // strcpy((char *)V_C, protocol);
-    V_C_length = strlen(protocol) - (2 * sizeof(char));
+    V_C_length = strlen(protocol) + sizeof(uint32_t) - (2 * sizeof(char));
 
     if (sentBytes != -1) {
         printf("Successful protocol send! Number of protocol bytes sent: %i\n", sentBytes);
@@ -868,9 +880,11 @@ int sendProtocol(int sock) {
     ssize_t bytesReceived = recv(sock, buffer, BUFFER_SIZE, 0);
     
     // save server protocol globally for use in sendDiffieHellmanExchange()
-    V_S = malloc(bytesReceived - (2 * sizeof(char)));
-    memcpy(V_S, buffer, bytesReceived - (2 * sizeof(char)));
-    V_S_length = bytesReceived - (2 * sizeof(char));
+    V_S = malloc(bytesReceived + sizeof(uint32_t) - (2 * sizeof(char)));
+    networkProtocolLen = htonl(bytesReceived - 2);
+    memcpy(V_S, &networkProtocolLen, sizeof(uint32_t));
+    memcpy(V_S + sizeof(uint32_t), buffer, bytesReceived - (2 * sizeof(char)));
+    V_S_length = bytesReceived + sizeof(uint32_t) - (2 * sizeof(char));
 
     if (bytesReceived > 0) {
         printf("server protocol: %s", buffer);
