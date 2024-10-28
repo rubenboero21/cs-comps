@@ -924,9 +924,11 @@ int sendKexInit (int sock) {
     RawByteArray *packet = constructPacket(payload);
 
     // save globally for use later in sendDiffieHellmanExchange()
-    I_C = malloc(payload -> size - 1); // dont want to include the message type byte
-    memcpy(I_C, payload -> data + 1, payload -> size - 1);
-    I_C_length = payload -> size - 1;
+    I_C = malloc(sizeof(uint32_t) + payload -> size - 1); // - 1: dont want to include the message type byte
+    uint32_t networkInitLen = htonl(payload -> size - 1);
+    memcpy(I_C, &networkInitLen, sizeof(uint32_t));
+    memcpy(I_C + sizeof(uint32_t), payload -> data + 1, payload -> size - 1);
+    I_C_length = sizeof(uint32_t) + payload -> size - 1;
     
     // printing for debugging:
     // printf("PACKET:\n");
@@ -952,10 +954,10 @@ int sendKexInit (int sock) {
     memset(buffer, 0, BUFFER_SIZE*2);  // Clear the buffer
     
     // recv only returns the ssh payload it seems
-    size_t bytes_received = recv(sock, buffer, BUFFER_SIZE*2, 0);    
-    if (bytes_received > 0) {
+    size_t bytesReceived = recv(sock, buffer, BUFFER_SIZE*2, 0);    
+    if (bytesReceived > 0) {
         // printf("kex init response:\n");
-        // for (int i = 0; i < bytes_received; i++) {
+        // for (int i = 0; i < bytesReceived; i++) {
         //     printf("%02x ", buffer[i]);
         // }
         // printf("\n");
@@ -968,10 +970,11 @@ int sendKexInit (int sock) {
     printf("packet len: %u | host pad len: %u\n", hostPacketLen, hostPadLen);
 
     uint32_t size = hostPacketLen - hostPadLen - 1 - 1; // -1 for message code byte, -1 for padding size byte
-
-    I_S = malloc(size); 
-    memcpy(I_S, buffer + 6, size);
-    I_S_length = size;
+    I_S = malloc(sizeof(uint32_t) + size); 
+    networkInitLen = htonl(size);
+    memcpy(I_S, &networkInitLen, sizeof(uint32_t));
+    memcpy(I_S + sizeof(uint32_t), buffer + 6, size);
+    I_S_length = sizeof(uint32_t) + size;
 
     return 0;
 }
