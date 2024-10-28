@@ -1,8 +1,25 @@
-
+// a struct to hold data and its size
 typedef struct {
     unsigned char *data;
     size_t size;
 } RawByteArray;
+
+// a struct to hold the data that the server sends back in step 2 of DH exchange
+typedef struct {
+    uint32_t hostKeyTypeLen;
+    unsigned char *hostKeyType;
+    uint32_t publicKeyLen;
+    unsigned char *publicKey;
+    
+    uint32_t fLen;
+    unsigned char *f;
+
+    uint32_t hostSigLen;
+    uint32_t hostSigTypeLen;
+    unsigned char *hostSigType;
+    size_t hostSigDataLen; // this is not part of the actual packet, we calculate it
+    unsigned char *hostSigData; 
+} ServerDHResponse;
 
 /*
 Input: Pointer to a RawByteArray struct that contains the payload data and size
