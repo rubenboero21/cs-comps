@@ -1,0 +1,10 @@
+Directory of openSSH:
+    /usr/local/src/openssh-9.9p1
+
+Whenever changes are made to code, run:
+    sudo make clean
+    sudo make 
+    sudo make install
+l
+To run the openSSH server:
+    sudo /usr/local/sbin/sshd -D -d
