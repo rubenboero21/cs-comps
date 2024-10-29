@@ -8,3 +8,8 @@ Whenever changes are made to code, run:
 l
 To run the openSSH server:
     sudo /usr/local/sbin/sshd -D -d
+
+Files modified
+    kexdh.c - called when our client connects to it & we get print out of K
+    kexgex.c - no output
+    kexgexc.c - no output
