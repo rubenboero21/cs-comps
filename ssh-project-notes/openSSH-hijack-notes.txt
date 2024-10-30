@@ -11,6 +11,9 @@ To run the openSSH server:
 
 Files modified
     kexdh.c - called when our client connects to it & we get print out of K
+            - handles generation of K
+    kex.c - called when our client connects - printing exchange hash and session ID
+    kexgen.c - prints out the exchange message components
     kexgex.c - no output
     kexgexc.c - no output (bc this is the client version)
     kexgexs.c - no output the server version (idk why this one doesn't work, may not be right function)
