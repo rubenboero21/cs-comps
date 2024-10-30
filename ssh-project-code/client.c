@@ -409,7 +409,7 @@ cleanup:
 // is it weird to only pass in half the variables we need, should we make all the variables we 
 // need global?
 RawByteArray *concatenateVerificationMessage(unsigned char *keyType, size_t keyTypeLen, unsigned char *pubKey, size_t pubKeyLen, unsigned char *K, size_t K_length) {
-    int sum = V_C_length + V_S_length + I_C_length + I_S_length + keyTypeLen + pubKeyLen + eGlobalLen + fGlobalLen + K_length;
+    int sum = V_C_length + V_S_length + I_C_length + I_S_length + (sizeof(uint32_t) + keyTypeLen + pubKeyLen) + eGlobalLen + fGlobalLen + K_length;
     unsigned char *message = malloc(sum);
     int offset = 0;
     memcpy(message, V_C, V_C_length);
@@ -450,6 +450,10 @@ RawByteArray *concatenateVerificationMessage(unsigned char *keyType, size_t keyT
     offset += I_S_length;
 
     int temp = offset;
+    uint32_t blobLen = htonl(keyTypeLen + pubKeyLen + sizeof(uint32_t) * 2);
+    memcpy(message + offset, &blobLen, keyTypeLen + pubKeyLen + sizeof(uint32_t) * 2);
+    offset += sizeof(uint32_t);
+    
     uint32_t networkKeyTypeLen = htonl(keyTypeLen);
     memcpy(message + offset, &networkKeyTypeLen, sizeof(uint32_t));
     offset += sizeof(uint32_t);
@@ -924,11 +928,11 @@ int sendKexInit (int sock) {
     RawByteArray *packet = constructPacket(payload);
 
     // save globally for use later in sendDiffieHellmanExchange()
-    I_C = malloc(sizeof(uint32_t) + payload -> size - 1); // - 1: dont want to include the message type byte
-    uint32_t networkInitLen = htonl(payload -> size - 1);
+    I_C = malloc(sizeof(uint32_t) + payload -> size);
+    uint32_t networkInitLen = htonl(payload -> size);
     memcpy(I_C, &networkInitLen, sizeof(uint32_t));
-    memcpy(I_C + sizeof(uint32_t), payload -> data + 1, payload -> size - 1);
-    I_C_length = sizeof(uint32_t) + payload -> size - 1;
+    memcpy(I_C + sizeof(uint32_t), payload -> data, payload -> size);
+    I_C_length = sizeof(uint32_t) + payload -> size;
     
     // printing for debugging:
     // printf("PACKET:\n");
@@ -969,11 +973,11 @@ int sendKexInit (int sock) {
     uint32_t hostPadLen = buffer[4];
     printf("packet len: %u | host pad len: %u\n", hostPacketLen, hostPadLen);
 
-    uint32_t size = hostPacketLen - hostPadLen - 1 - 1; // -1 for message code byte, -1 for padding size byte
+    uint32_t size = hostPacketLen - hostPadLen - 1; // -1 for padding size byte
     I_S = malloc(sizeof(uint32_t) + size); 
     networkInitLen = htonl(size);
     memcpy(I_S, &networkInitLen, sizeof(uint32_t));
-    memcpy(I_S + sizeof(uint32_t), buffer + 6, size);
+    memcpy(I_S + sizeof(uint32_t), buffer + 5, size);
     I_S_length = sizeof(uint32_t) + size;
 
     return 0;
