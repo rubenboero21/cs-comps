@@ -12,6 +12,7 @@ To run the openSSH server:
 Files modified
     kexdh.c - called when our client connects to it & we get print out of K
             - handles generation of K
+            - hashes the exchange message
     kex.c - called when our client connects - printing exchange hash and session ID
             - hash is printed out from the function that is doing encryption stuff (I think)
                 (kex_derive_keys function)
