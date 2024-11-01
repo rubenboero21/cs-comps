@@ -40,15 +40,15 @@ unsigned char *eGlobal;
 size_t eGlobalLen;
 
 // swaps the endian-ness of a string of characters
-unsigned char *swapEndianNess(unsigned char *message, size_t size) {
-    for (int i = 0; i < size / 2; i++) {
-        unsigned char temp = message[i];
-        message[i] = message[size - i - 1];
-        message[size - i - 1] = temp;
-    }
+// unsigned char *swapEndianNess(unsigned char *message, size_t size) {
+//     for (int i = 0; i < size / 2; i++) {
+//         unsigned char temp = message[i];
+//         message[i] = message[size - i - 1];
+//         message[size - i - 1] = temp;
+//     }
     
-    return message;
-}
+//     return message;
+// }
 
 // remember to free the struct AND data
 RawByteArray *constructPacket(RawByteArray *payload) {
@@ -409,7 +409,7 @@ cleanup:
 // is it weird to only pass in half the variables we need, should we make all the variables we 
 // need global?
 RawByteArray *concatenateVerificationMessage(unsigned char *keyType, size_t keyTypeLen, unsigned char *pubKey, size_t pubKeyLen, unsigned char *K, size_t K_length) {
-    int sum = V_C_length + V_S_length + I_C_length + I_S_length + (sizeof(uint32_t) + keyTypeLen + pubKeyLen) + eGlobalLen + fGlobalLen + K_length;
+    int sum = V_C_length + V_S_length + I_C_length + I_S_length + (sizeof(uint32_t) * 3 + keyTypeLen + pubKeyLen) + eGlobalLen + fGlobalLen + K_length;
     unsigned char *message = malloc(sum);
     int offset = 0;
     memcpy(message, V_C, V_C_length);
@@ -505,52 +505,6 @@ RawByteArray *concatenateVerificationMessage(unsigned char *keyType, size_t keyT
     return messageAndSize;
 }
 
-RawByteArray *generateSharedKey(EVP_PKEY *pkey, EVP_PKEY *peerkey) {
-    RawByteArray *sharedKey = malloc(sizeof(RawByteArray));
-    assert(sharedKey != NULL); 
-
-    EVP_PKEY_CTX *ctx;
-    unsigned char *skey;
-    size_t skeylen;
-
-    // Initialize context
-    ctx = EVP_PKEY_CTX_new(pkey, NULL);
-
-    // Initialize derivation
-    EVP_PKEY_derive_init(ctx);
-
-    // Set peer's public key
-    EVP_PKEY_derive_set_peer(ctx, peerkey);
-
-    // Determine buffer length for shared secret
-    EVP_PKEY_derive(ctx, NULL, &skeylen);
-
-    // Allocate memory for shared secret
-    skey = OPENSSL_malloc(skeylen);
-    assert(skey != NULL);
-
-    // Derive the shared secret
-    EVP_PKEY_derive(ctx, skey, &skeylen);
-
-    // Debugging output
-    printf("skeylen: %zu\n", skeylen);
-    printf("SHARED KEY!!\n");
-    for (int i = 0; i < skeylen; i++) {
-        printf("%02x ", skey[i]);
-    }
-    printf("\n");
-
-    // Store the shared secret
-    sharedKey->data = skey;
-    sharedKey->size = skeylen;
-
-    // Clean up
-    EVP_PKEY_CTX_free(ctx);
-
-    // will need to use OPENSSL free on sharedKey -> data since OSSL malloc is used to create it
-    return sharedKey;
-}
-
 /*
 To get the libraries to work, need to run the following command (on Ruben's arm mac with
 openssl installed via homebrew)
@@ -558,16 +512,13 @@ gcc client.c -I/opt/homebrew/opt/openssl@3/include -L/opt/homebrew/opt/openssl@3
 gcc <file name> -I<path to openssl install>/include -L<path to openssl install>/lib -lssl -lcrypto
 */
 int sendDiffieHellmanExchange(int sock) {
-    // init all variables that will need to be freed
-    EVP_PKEY_CTX *pctx = NULL, *kctx = NULL, *peerCtx = NULL;
-    EVP_PKEY *params = NULL, *clientKey = NULL, *peerkey = NULL;
-    BIO *out = NULL;
-    BIGNUM *p = NULL, *g = NULL, *eBN = NULL, *fBN = NULL;
-    OSSL_PARAM dhParams[3];
-    OSSL_PARAM peerParams[4];
-    unsigned char *pBin = NULL, *gBin = NULL, *eNetworkOrder = NULL, *buffer = NULL, *serverResponse = NULL;
-    int pSize = 0, gSize = 0;
+    // generate keys using group 14's p and g
+    BIGNUM *p, *g, *shared_secret, *f = NULL;
+    const BIGNUM *pub_key, *priv_key = NULL;
     RawByteArray *e = NULL, *payload = NULL, *packet = NULL;
+    unsigned char *buffer, *serverResponse = NULL;
+    unsigned char *kbuf = NULL;
+    size_t klen = 0;
 
     // create group 14 parameters with bignum
     p = BN_new();
@@ -575,54 +526,52 @@ int sendDiffieHellmanExchange(int sock) {
     g = BN_new();
     BN_set_word(g, 2);
 
-    pSize = BN_num_bytes(p);
-    gSize = BN_num_bytes(g);
+    DH *dh = DH_new();
 
-    // allocate memory for pBin and gBin
-    pBin = (unsigned char*)OPENSSL_malloc(pSize);
-    gBin = (unsigned char*)OPENSSL_malloc(gSize);
+    DH_set0_pqg(dh, p, NULL, g);
 
-    // convert p and g into binary form 
-    // need to pad out binary to ensure standard size
-    BN_bn2binpad(p, pBin, pSize);
-    BN_bn2binpad(g, gBin, gSize);
+    DH_set_length(dh, 2048 - 1); // group 14 p is 2048 bits, so our private key (x) should be less than p bits long
 
-    // initialize the parameter context for DH key generation 
-    pctx = EVP_PKEY_CTX_new_from_name(NULL, "DH", NULL);
-
-    // prepare the DH parameters (p and g) using OSSL_PARAM array 
-    dhParams[0] = OSSL_PARAM_construct_BN("p", pBin, pSize);
-    dhParams[1] = OSSL_PARAM_construct_BN("g", gBin, gSize);
-    dhParams[2] = OSSL_PARAM_construct_end();
-
-    // use EVP_PKEY_fromdata to create an EVP_PKEY using the DH parameters 
-    EVP_PKEY_fromdata_init(pctx);
-    EVP_PKEY_fromdata(pctx, &params, EVP_PKEY_KEY_PARAMETERS, dhParams);
-
-    // generate a new DH key
-    kctx = EVP_PKEY_CTX_new(params, NULL);
-    EVP_PKEY_keygen_init(kctx);
-    EVP_PKEY_keygen(kctx, &clientKey);
-
-    // extract the public key BIGNUM
-    EVP_PKEY_get_bn_param(clientKey, "pub", &eBN);
-
-    int eLen = BN_num_bytes(eBN);  // get the length of the public key in bytes
-    eNetworkOrder = (unsigned char *)malloc(eLen);
-
-    BN_bn2bin(eBN, eNetworkOrder);
-
-    // swap endian-ness from little-endian to big-endian
-    eNetworkOrder = swapEndianNess(eNetworkOrder, eLen);
-    
-    e = addTwosComplementBit(eNetworkOrder, eLen);
-
-    printf("public key (e)\n");
-    printf("len of key: %zu\n", e -> size);
-    for (int i = 0; i < e -> size; i++) {
-        printf("%02x ", e -> data[i]);
-    }
+    // Print p
+    printf("Prime (p): ");
+    BN_print_fp(stdout, p);
     printf("\n");
+
+    // Print g
+    printf("Generator (g): ");
+    BN_print_fp(stdout, g);
+    printf("\n");
+
+    DH_generate_key(dh);
+
+    // DH_get0_pqg(dh, &p, &g, NULL);
+    DH_get0_key(dh, &pub_key, &priv_key);
+
+    // Print private key
+    printf("Private Key (x): ");
+    BN_print_fp(stdout, priv_key);
+    printf("\n");
+
+    int eSize = BN_num_bytes(pub_key);
+    printf("size of e: %i bytes\n", eSize);
+    
+    // Print private key
+    printf("Public Key (e): ");
+    BN_print_fp(stdout, pub_key);
+    printf("\n");
+    
+    // e->data = pub_key;
+    // e->size = eSize;
+
+    unsigned char* eBytes = malloc(eSize);
+    BN_bn2bin(pub_key, eBytes);  
+    
+    e = addTwosComplementBit(eBytes, eSize);
+    // printf("e in Two's Complement: \n");
+    // for (int i = 0; i < e -> size; i++) {
+    //     printf("%02x ", e->data[i]);
+    // }
+    // printf("\n");
 
     // building e payload (including prepending size to mpint)
     buffer = malloc(e -> size + 1 + 4);
@@ -631,17 +580,11 @@ int sendDiffieHellmanExchange(int sock) {
     memcpy(buffer + 1, &mpintLenNetworkOrder, sizeof(uint32_t));
     memcpy(buffer + 5, e -> data, e -> size);
 
-    // store a global copy of e for use in message verification
+    // store a global copy of e encoded as an mpint for use in message verification
     eGlobal = malloc(e -> size + sizeof(uint32_t));
     memcpy(eGlobal, &mpintLenNetworkOrder, sizeof(uint32_t));
     memcpy(eGlobal + sizeof(uint32_t), e -> data, e -> size);
     eGlobalLen = e -> size + sizeof(uint32_t);
-
-    /* Optional: Print the private key */
-    out = BIO_new_fp(stdout, BIO_NOCLOSE);
-    if (out && clientKey) {
-        EVP_PKEY_print_private(out, clientKey, 0, NULL);
-    }
 
     payload = malloc(sizeof(RawByteArray));
     assert(payload != NULL);
@@ -658,7 +601,7 @@ int sendDiffieHellmanExchange(int sock) {
     } else {
         printf("Send did not complete successfully.\n");
     }
-    
+
     serverResponse = malloc(BUFFER_SIZE);
     memset(serverResponse, 0, BUFFER_SIZE);  // Clear the buffer    
     ssize_t bytesReceived = recv(sock, serverResponse, BUFFER_SIZE, 0);
@@ -678,63 +621,34 @@ int sendDiffieHellmanExchange(int sock) {
 
     ServerDHResponse *dhResponse = extractServerDHResponse(serverResponse);
 
-    // need to store the f from server as global bc OSSL doesnt like the leading 2s complement bit, so we remove it for use within OSSL stuff
+    // store f globally
     fGlobal = malloc(dhResponse -> fLen + sizeof(uint32_t));
     mpintLenNetworkOrder = htonl(dhResponse -> fLen);
     memcpy(fGlobal, &mpintLenNetworkOrder, sizeof(uint32_t));
     memcpy(fGlobal + sizeof(uint32_t), dhResponse -> f, dhResponse -> fLen);
     fGlobalLen = dhResponse -> fLen + sizeof(uint32_t);
 
-    // importing f into a PKEY:
+    // derive shared secret
+    klen = DH_size(dh);
+    kbuf = malloc(klen);
+    shared_secret = BN_new();
+    f = BN_new();
+    BN_bin2bn(dhResponse -> f, dhResponse -> fLen, f);
+    printf("F:\n");
+    BN_print_fp(stdout, f);
+    printf("\n");
+
+    DH_compute_key(kbuf, f, dh);
     
-    // If the first byte of f is 0x00 and the length is 257, strip the leading byte.
-    // OSSL gets angry in key agreement if there is a leading byte
-    if (dhResponse->fLen == 257 && dhResponse->f[0] == 0x00) {
-        // Create a new buffer to store the adjusted public key
-        unsigned char *adjustedF = malloc(dhResponse->fLen - 1);
-        assert(adjustedF != NULL); // Check for allocation failure
-
-        // Copy the data without the leading zero
-        memcpy(adjustedF, dhResponse -> f + 1, dhResponse -> fLen - 1);
-
-        // Update the pointer and length
-        free(dhResponse -> f); // Free the old buffer if you dynamically allocated it
-        dhResponse -> f = adjustedF; // Point to the new buffer
-        dhResponse -> fLen -= 1; // Adjust the length
-    }
-
-    fBN = BN_new();
-    BN_bin2bn(dhResponse -> f, dhResponse -> fLen, fBN);
-
-    peerCtx = EVP_PKEY_CTX_new_from_name(NULL, "DH", NULL);
-
-    // prepare the parameters for peer's public key
-    peerParams[0] = OSSL_PARAM_construct_BN("p", pBin, pSize);  
-    peerParams[1] = OSSL_PARAM_construct_BN("g", gBin, gSize); 
-    peerParams[2] = OSSL_PARAM_construct_BN("pub", dhResponse -> f, dhResponse -> fLen); 
-    peerParams[3] = OSSL_PARAM_construct_end(); 
-
-    EVP_PKEY_fromdata_init(peerCtx);
-    EVP_PKEY_fromdata(peerCtx, &peerkey, EVP_PKEY_PUBLIC_KEY, peerParams);
-    
-    printf("FFFFF:\n");
-    for (int i = 0; i < dhResponse -> fLen; i++) {
-        printf("%02x ", dhResponse -> f[i]);
+    printf("Klen: %zu\n", klen);
+    printf("K: \n");
+    for (int i = 0; i < klen; i++) {
+        printf("%02x ", kbuf[i]);
     }
     printf("\n");
 
-    // PRINTINg TO DEBUG
-    EVP_PKEY_print_public(out, peerkey, 0, NULL);
-
-    // still need to store the output, or memory leak - remember to use OSSL free for data variable
-    RawByteArray *k = generateSharedKey(clientKey, peerkey);
-
-    // formatting k to be in mpint format
-    // SWAP ENDIAN-NESS OF K HERE MAYBE
-    // unsigned char *swappedData = swapEndianNess(k -> data, k -> size);
-    // RawByteArray *twosK = addTwosComplementBit(swappedData, k -> size);
-
-    RawByteArray *twosK = addTwosComplementBit(k -> data, k -> size);
+    // encode K as mpint
+    RawByteArray *twosK = addTwosComplementBit(kbuf, klen);
     RawByteArray *mpintK = malloc(sizeof(RawByteArray));
     unsigned char *mpintKdata = malloc(twosK -> size + sizeof(uint32_t));
     mpintLenNetworkOrder = htonl(twosK -> size);
@@ -745,43 +659,35 @@ int sendDiffieHellmanExchange(int sock) {
 
     RawByteArray *verificationMessage = concatenateVerificationMessage(dhResponse -> hostKeyType, dhResponse -> hostKeyTypeLen, dhResponse -> publicKey, dhResponse -> publicKeyLen, mpintK -> data, mpintK -> size);
 
+    // verify server
     verifyServerSignature(dhResponse, verificationMessage);
 
-    // UTILITY FUNC COMMENTED OUT TO MAKE OUTPUT NICER
-    // printServerDHResponse(serverResponse);
 
     // cleanup
-    EVP_PKEY_CTX_free(pctx);
-    EVP_PKEY_CTX_free(kctx);
-    EVP_PKEY_CTX_free(peerCtx);
-    EVP_PKEY_free(params);
-    EVP_PKEY_free(clientKey);
-    EVP_PKEY_free(peerkey);
-    BIO_free(out);
     BN_free(p);
     BN_free(g);
-    BN_free(eBN);
-    BN_free(fBN);
-    OPENSSL_free(pBin);
-    OPENSSL_free(gBin);
-    free(eNetworkOrder);
-    free(buffer);
-    free(serverResponse);
+    DH_free(dh);
+    free(eBytes);
     free(e -> data);
     free(e);
+    free(buffer);
+    free(payload -> data);
     free(payload);
-    // still need to free packet data even though we malloced data
     free(packet -> data);
     free(packet);
+    free(serverResponse);
     cleanupServerDHResponse(dhResponse);
-    OPENSSL_free(k -> data);
-    free(k);
+    free(kbuf);
+    BN_free(shared_secret);
+    BN_free(f);
     free(twosK -> data);
     free(twosK);
     free(mpintK -> data);
     free(mpintK);
     free(verificationMessage -> data);
     free(verificationMessage);
+
+    exit(0);
     
     return 0;
 }
