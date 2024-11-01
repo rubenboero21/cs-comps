@@ -513,7 +513,7 @@ gcc <file name> -I<path to openssl install>/include -L<path to openssl install>/
 */
 int sendDiffieHellmanExchange(int sock) {
     // generate keys using group 14's p and g
-    BIGNUM *p, *g, *shared_secret, *f = NULL;
+    BIGNUM *p, *g, *f = NULL;
     const BIGNUM *pub_key, *priv_key = NULL;
     RawByteArray *e = NULL, *payload = NULL, *packet = NULL;
     unsigned char *buffer, *serverResponse = NULL;
@@ -631,7 +631,6 @@ int sendDiffieHellmanExchange(int sock) {
     // derive shared secret
     klen = DH_size(dh);
     kbuf = malloc(klen);
-    shared_secret = BN_new();
     f = BN_new();
     BN_bin2bn(dhResponse -> f, dhResponse -> fLen, f);
     printf("F:\n");
@@ -664,21 +663,20 @@ int sendDiffieHellmanExchange(int sock) {
 
 
     // cleanup
-    BN_free(p);
-    BN_free(g);
+    // BN_free(p);
+    // BN_free(g);
     DH_free(dh);
     free(eBytes);
     free(e -> data);
     free(e);
     free(buffer);
-    free(payload -> data);
+    // free(payload -> data);
     free(payload);
     free(packet -> data);
     free(packet);
     free(serverResponse);
     cleanupServerDHResponse(dhResponse);
     free(kbuf);
-    BN_free(shared_secret);
     BN_free(f);
     free(twosK -> data);
     free(twosK);
