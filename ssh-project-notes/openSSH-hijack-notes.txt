@@ -13,6 +13,8 @@ Files modified
     kexdh.c - called when our client connects to it & we get print out of K
             - handles generation of K
     kex.c - called when our client connects - printing exchange hash and session ID
+            - hash is printed out from the function that is doing encryption stuff (I think)
+                (kex_derive_keys function)
     kexgen.c - prints out the exchange message components
     kexgex.c - no output
     kexgexc.c - no output (bc this is the client version)
