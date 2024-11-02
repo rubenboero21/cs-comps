@@ -389,11 +389,12 @@ int verifyServerSignature(ServerDHResponse *dhResponse, RawByteArray *message) {
 
     // Perform the verification using the server's signature (Ed25519 doesn't use DigestUpdate)
     if (EVP_DigestVerify(mdctx, dhResponse->hostSigData, dhResponse->hostSigDataLen, hashedMessage -> data, hashedMessage -> size) == 1) {
-        printf("Server's signature verified successfully!\n");
+        // printf("Server's signature verified successfully!\n");
         ret = 1;  // Signature is valid
-    } else {
-        printf("Error: Server's signature verification failed\n");
     }
+    // } else {
+    //     printf("Error: Server's signature verification failed\n");
+    // }
 
     free(hashedMessage -> data);
     free(hashedMessage);
@@ -659,10 +660,15 @@ int sendDiffieHellmanExchange(int sock) {
     RawByteArray *verificationMessage = concatenateVerificationMessage(dhResponse -> hostKeyType, dhResponse -> hostKeyTypeLen, dhResponse -> publicKey, dhResponse -> publicKeyLen, mpintK -> data, mpintK -> size);
 
     // verify server
-    verifyServerSignature(dhResponse, verificationMessage);
+    if (verifyServerSignature(dhResponse, verificationMessage)) {
+        printf("Server's signature verified successfully!\n");
+    } else {
+        printf("Error: Server's signature verification failed\n");
+        // come up with better exit code
+        exit(1);
+    }
 
-
-    // cleanup
+    // cleanup - NOT CONFIDENT THAT WE ARE FREEING EVERYTHING CORRECTLY
     // BN_free(p);
     // BN_free(g);
     DH_free(dh);
@@ -753,9 +759,7 @@ RawByteArray *constructKexPayload() {
     offset += 4;
     
     RawByteArray *payload = malloc(sizeof(RawByteArray));
-    assert(payload != NULL);
     payload -> data = malloc(offset);
-    assert(payload -> data != NULL);
     memcpy(payload->data, buffer, offset); // need to do it this way, or memory leak ensues
     payload -> size = offset;
     
@@ -952,5 +956,6 @@ int main(int argc, char **argv) {
     free(I_S);
     free(fGlobal);
     free(eGlobal);
+
     return 0;
 }
