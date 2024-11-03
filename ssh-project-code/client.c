@@ -695,10 +695,11 @@ int sendDiffieHellmanExchange(int sock) {
 }
 
 RawByteArray *generateNewKeysPacket() {
-    unsigned char *data = SSH_MSG_NEWKEYS;
+    int code = SSH_MSG_NEWKEYS;
+    unsigned char data = code;
     
     RawByteArray *payloadAndSize = malloc(sizeof(RawByteArray));
-    payloadAndSize -> data = data;
+    payloadAndSize -> data = &data;
     payloadAndSize -> size = 1;
 
     RawByteArray *packet = constructPacket(payloadAndSize);
@@ -711,6 +712,8 @@ RawByteArray *generateNewKeysPacket() {
 
 // remember to free both data and struct
 // func takes in no arguments bc global variables store required info
+// change name from chacha to whatever encryption algo we settle on
+// will need to change the size of the key we output depending on the algo
 RawByteArray *deriveChaChaKey() {
     int sum = kGlobalLen + hashGlobalLen + 1 + hashGlobalLen; // string to hash is K || H || "B" || session_id
     unsigned char *toHash = malloc(sum);
@@ -743,22 +746,6 @@ RawByteArray *deriveChaChaKey() {
     return hash;
 }
 
-RawByteArray *encryptChaCha(RawByteArray *key, RawByteArray *plaintext) {
-    // chacha has predefined IV
-    unsigned int iv = htons(1);
-
-    ctx = EVP_CIPHER_CTX_new();
-
-    EVP_EncryptInit_ex(ctx, EVP_chacha20_poly1305(), NULL, NULL, NULL);
-
-    EVP_EncryptInit_ex(ctx, NULL, NULL, key, iv);
-
-    EVP_EncryptUpdate(ctx, ciphertext, &len, plaintext -> data, plaintext -> size);
-
-    
-
-}
-
 size_t writeAlgoList(unsigned char *buffer, const char *list) {
     uint32_t len = htonl(strlen(list));
     memcpy(buffer, &len, sizeof(len));       // Write the length prefix
@@ -789,7 +776,7 @@ RawByteArray *constructKexPayload() {
         "diffie-hellman-group14-sha256",
         // server_host_key_algorithms
         "ssh-ed25519", 
-        // encryption_algorithms_client_to_server
+        // encryption_algorithms_client_to_server 
         "chacha20-poly1305@openssh.com",
         // encryption_algorithms_server-to-client
         "chacha20-poly1305@openssh.com",
@@ -979,7 +966,7 @@ int start_client(const char *host, const int port) {
 
     sendDiffieHellmanExchange(sock);
     
-    RawByteArray *encryptionKey = deriveChaChaKey();
+    // RawByteArray *encryptionKey = deriveChaChaKey();
 
     // printf("ENCRYPTION KEY:\n");
     // for (int i = 0; i < encryptionKey -> size; i++) {
@@ -987,18 +974,7 @@ int start_client(const char *host, const int port) {
     // }
     // printf("\n");
 
-    RawByteArray *newKeysPacket = generateNewKeysPacket();
-
-    RawByteArray *encryptedNewKeysPacket = encryptChaCha(encryptionKey, newKeysPacket);
-
     close(sock);
-
-    free(encryptionKey -> data);
-    free(encryptionKey);
-    free(newKeysPacket -> data);
-    free(newKeysPacket);
-    free(encryptedNewKeysPacket -> data)
-    free(encryptedNewKeysPacket);
 
     return 0;
 }
