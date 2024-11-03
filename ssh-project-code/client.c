@@ -21,8 +21,7 @@
 #define SSH_MSG_KEXINIT 20
 #define SSH_MSG_KEXDH_INIT 30
 #define SSH_MSG_NEWKEYS 21
-#define BLOCKSIZE 16 // aes (our encryption algorithm) cipher size is 16, will need to make 
-                     // this dynamic when we implement multiple possible algos
+#define BLOCKSIZE 16 // if encryption isn't working, check blocksize
 
 // defining global variables to construct the message to hash (H) as part of server verification
 // excluding K_S, e, f, & k because we have access to those locally in sendDiffieHellmanExchange()
@@ -38,17 +37,10 @@ unsigned char *fGlobal;
 size_t fGlobalLen;
 unsigned char *eGlobal;
 size_t eGlobalLen;
-
-// swaps the endian-ness of a string of characters
-// unsigned char *swapEndianNess(unsigned char *message, size_t size) {
-//     for (int i = 0; i < size / 2; i++) {
-//         unsigned char temp = message[i];
-//         message[i] = message[size - i - 1];
-//         message[size - i - 1] = temp;
-//     }
-    
-//     return message;
-// }
+unsigned char *kGlobal;
+size_t kGlobalLen;
+unsigned char *hashGlobal;
+size_t hashGlobalLen;
 
 // remember to free the struct AND data
 RawByteArray *constructPacket(RawByteArray *payload) {
@@ -385,6 +377,10 @@ int verifyServerSignature(ServerDHResponse *dhResponse, RawByteArray *message) {
     }
     printf("\n");
 
+    // save our hash as a global variable for use in encryption key derivation
+    hashGlobal = malloc(hashedMessage -> size);
+    hashGlobalLen = hashedMessage -> size;
+    memcpy(hashGlobal, hashedMessage -> data, hashGlobalLen);
     
 
     // Perform the verification using the server's signature (Ed25519 doesn't use DigestUpdate)
@@ -405,7 +401,6 @@ cleanup:
 
     return ret;
 }
-
 
 // is it weird to only pass in half the variables we need, should we make all the variables we 
 // need global?
@@ -657,6 +652,11 @@ int sendDiffieHellmanExchange(int sock) {
     mpintK -> data = mpintKdata;
     mpintK -> size = twosK -> size + sizeof(uint32_t);
 
+    // save K globally for use in encryption later
+    kGlobal = malloc(mpintK -> size);
+    kGlobalLen = mpintK -> size;
+    memcpy(kGlobal, mpintK -> data, kGlobalLen);
+
     RawByteArray *verificationMessage = concatenateVerificationMessage(dhResponse -> hostKeyType, dhResponse -> hostKeyTypeLen, dhResponse -> publicKey, dhResponse -> publicKeyLen, mpintK -> data, mpintK -> size);
 
     // verify server
@@ -690,10 +690,73 @@ int sendDiffieHellmanExchange(int sock) {
     free(mpintK);
     free(verificationMessage -> data);
     free(verificationMessage);
-
-    exit(0);
     
     return 0;
+}
+
+RawByteArray *generateNewKeysPacket() {
+    unsigned char *data = SSH_MSG_NEWKEYS;
+    
+    RawByteArray *payloadAndSize = malloc(sizeof(RawByteArray));
+    payloadAndSize -> data = data;
+    payloadAndSize -> size = 1;
+
+    RawByteArray *packet = constructPacket(payloadAndSize);
+
+    free(payloadAndSize -> data);
+    free(payloadAndSize);
+
+    return packet;
+}
+
+// remember to free both data and struct
+// func takes in no arguments bc global variables store required info
+RawByteArray *deriveChaChaKey() {
+    int sum = kGlobalLen + hashGlobalLen + 1 + hashGlobalLen; // string to hash is K || H || "B" || session_id
+    unsigned char *toHash = malloc(sum);
+    
+    int offset = 0;
+    memcpy(toHash, kGlobal, kGlobalLen);
+    offset += kGlobalLen;
+    memcpy(toHash + offset, hashGlobal, hashGlobalLen);
+    offset += hashGlobalLen;
+    toHash[offset] = 'C';
+    // memcpy(toHash + offset, 'C', sizeof(char));
+    offset += sizeof(char);
+    memcpy(toHash + offset, hashGlobal, hashGlobalLen);
+
+    RawByteArray *toHashAndSize = malloc(sizeof(RawByteArray));
+    toHashAndSize -> data = toHash;
+    toHashAndSize -> size = sum;
+
+    RawByteArray *hash = computeSHA256Hash(toHashAndSize);
+
+    // printf("toHash: \n");
+    // for (int i = 0; i < toHashAndSize -> size; i++) {
+    //     printf("%02x", toHashAndSize -> data[i]);
+    // }
+    // printf("\n");
+
+    free(toHash);
+    free(toHashAndSize);
+
+    return hash;
+}
+
+RawByteArray *encryptChaCha(RawByteArray *key, RawByteArray *plaintext) {
+    // chacha has predefined IV
+    unsigned int iv = htons(1);
+
+    ctx = EVP_CIPHER_CTX_new();
+
+    EVP_EncryptInit_ex(ctx, EVP_chacha20_poly1305(), NULL, NULL, NULL);
+
+    EVP_EncryptInit_ex(ctx, NULL, NULL, key, iv);
+
+    EVP_EncryptUpdate(ctx, ciphertext, &len, plaintext -> data, plaintext -> size);
+
+    
+
 }
 
 size_t writeAlgoList(unsigned char *buffer, const char *list) {
@@ -727,9 +790,9 @@ RawByteArray *constructKexPayload() {
         // server_host_key_algorithms
         "ssh-ed25519", 
         // encryption_algorithms_client_to_server
-        "aes256-gcm@openssh.com",
+        "chacha20-poly1305@openssh.com",
         // encryption_algorithms_server-to-client
-        "aes256-gcm@openssh.com",
+        "chacha20-poly1305@openssh.com",
         // mac_algorithms_client_to_server
         "none",
         // mac_algorithms_server_to_client
@@ -915,8 +978,27 @@ int start_client(const char *host, const int port) {
     sendKexInit(sock);
 
     sendDiffieHellmanExchange(sock);
+    
+    RawByteArray *encryptionKey = deriveChaChaKey();
+
+    // printf("ENCRYPTION KEY:\n");
+    // for (int i = 0; i < encryptionKey -> size; i++) {
+    //     printf("%02x ", encryptionKey -> data[i]);
+    // }
+    // printf("\n");
+
+    RawByteArray *newKeysPacket = generateNewKeysPacket();
+
+    RawByteArray *encryptedNewKeysPacket = encryptChaCha(encryptionKey, newKeysPacket);
 
     close(sock);
+
+    free(encryptionKey -> data);
+    free(encryptionKey);
+    free(newKeysPacket -> data);
+    free(newKeysPacket);
+    free(encryptedNewKeysPacket -> data)
+    free(encryptedNewKeysPacket);
 
     return 0;
 }
@@ -932,23 +1014,6 @@ int main(int argc, char **argv) {
 
     start_client(host, port);
 
-    // print statements to verify that we set the global variables correctly
-    // printf("V_C: %s", V_C);
-    // printf("V_S: ");
-    // for (int i = 0; i < V_S_length; i++) {
-    //     printf("%c", V_S[i]);
-    // }
-    // printf("I_C: ");
-    // for (int i = 0; i < I_C_length; i++) {
-    //     printf("%02x ", I_C[i]);
-    // }
-    // printf("\n");
-    // printf("I_S: ");
-    // for (int i = 0; i < I_S_length; i++) {
-    //     printf("%02x ", I_S[i]);
-    // }
-    // printf("\n");
-
     // free global variables
     free(V_C);
     free(V_S);
@@ -956,6 +1021,8 @@ int main(int argc, char **argv) {
     free(I_S);
     free(fGlobal);
     free(eGlobal);
+    free(hashGlobal);
+    free(kGlobal);
 
     return 0;
 }
