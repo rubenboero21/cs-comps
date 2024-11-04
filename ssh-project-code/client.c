@@ -21,7 +21,7 @@
 #define SSH_MSG_KEXINIT 20
 #define SSH_MSG_KEXDH_INIT 30
 #define SSH_MSG_NEWKEYS 21
-#define BLOCKSIZE 16 // if encryption isn't working, check blocksize
+#define BLOCKSIZE 64 // if encryption isn't working, check blocksize
 
 // defining global variables to construct the message to hash (H) as part of server verification
 // excluding K_S, e, f, & k because we have access to those locally in sendDiffieHellmanExchange()
@@ -316,14 +316,6 @@ int verifyServerSignature(ServerDHResponse *dhResponse, RawByteArray *message) {
     EVP_MD_CTX *mdctx = NULL;
     int ret = 0;
 
-    // Debug: print the length of the public key and its content
-    // printf("Server public key length: %d\n", dhResponse->publicKeyLen);
-    // printf("Server public key data (hex): ");
-    // for (int i = 0; i < dhResponse->publicKeyLen; i++) {
-    //     printf("%02x ", dhResponse->publicKey[i]);
-    // }
-    // printf("\n");
-
     // Load the server's EDDSA public key from raw byte array (assuming it's Ed25519)
     serverPublicKey = EVP_PKEY_new_raw_public_key(EVP_PKEY_ED25519, NULL, dhResponse->publicKey, dhResponse->publicKeyLen);
     if (serverPublicKey == NULL) {
@@ -351,25 +343,6 @@ int verifyServerSignature(ServerDHResponse *dhResponse, RawByteArray *message) {
         goto cleanup;
     }
 
-    // Debug: print the message data being verified
-    // printf("Message data (hex): ");
-    // for (int i = 0; i < message->size; i++) {
-    //     printf("%02x ", message->data[i]);
-    // }
-    // printf("\n");
-
-    // Debug: print the signature data being verified
-    // printf("Server signature length: %zu\n", dhResponse->hostSigDataLen - 4);
-    // printf("Server signature data (hex): ");
-    // for (int i = 4; i < dhResponse->hostSigDataLen; i++) {
-    //     printf("%02x ", dhResponse->hostSigData[i]);
-    // }
-    // printf("\n");
-
-    // guessing whats wrong: maybe endian-ness needs to be swapped
-    // message -> data = swapEndianNess(message -> data, message -> size);
-
-    // NEED TO HASH MESSAGE WITH SHA256 BEFORE TRYING TO VERIFY we think
     RawByteArray *hashedMessage = computeSHA256Hash(message);
     printf("HASHED MESSAGE:\n");
     for (int i = 0; i < hashedMessage -> size; i++) {
@@ -710,10 +683,14 @@ RawByteArray *generateNewKeysPacket() {
     return packet;
 }
 
+// RawByteArray *encrypt_chacha20_poly1305() {
+
+
+//     return 
+// }
+
 // remember to free both data and struct
 // func takes in no arguments bc global variables store required info
-// change name from chacha to whatever encryption algo we settle on
-// will need to change the size of the key we output depending on the algo
 RawByteArray *deriveChaChaKey() {
     int sum = kGlobalLen + hashGlobalLen + 1 + hashGlobalLen; // string to hash is K || H || "B" || session_id
     unsigned char *toHash = malloc(sum);
@@ -966,15 +943,23 @@ int start_client(const char *host, const int port) {
 
     sendDiffieHellmanExchange(sock);
     
-    // RawByteArray *encryptionKey = deriveChaChaKey();
+    RawByteArray *encryptionKey = deriveChaChaKey();
 
-    // printf("ENCRYPTION KEY:\n");
-    // for (int i = 0; i < encryptionKey -> size; i++) {
-    //     printf("%02x ", encryptionKey -> data[i]);
-    // }
-    // printf("\n");
+    printf("ENCRYPTION KEY:\n");
+    for (int i = 0; i < encryptionKey -> size; i++) {
+        printf("%02x ", encryptionKey -> data[i]);
+    }
+    printf("\n");
+
+    // encrypt_chacha20_poly1305();
+
+    // RawByteArray *newKeysPacket = RawByteArraygenerateNewKeysPacket();
 
     close(sock);
+
+    // cleanup
+    free(encryptionKey -> data);
+    free(encryptionKey);
 
     return 0;
 }
