@@ -15,13 +15,14 @@
 #include <openssl/err.h>
 #include <openssl/bio.h>
 #include <openssl/pem.h>
+#include <openssl/kdf.h>
 
 // IDK WHAT SIZE BUFFER MAKES SENSE, LAWSUS USES 1024 A LOT, SO USING THAT FOR NOW
 #define BUFFER_SIZE 1024
 #define SSH_MSG_KEXINIT 20
 #define SSH_MSG_KEXDH_INIT 30
 #define SSH_MSG_NEWKEYS 21
-#define BLOCKSIZE 64 // if encryption isn't working, check blocksize
+#define BLOCKSIZE 16 // if encryption isn't working, check blocksize
 
 // defining global variables to construct the message to hash (H) as part of server verification
 // excluding K_S, e, f, & k because we have access to those locally in sendDiffieHellmanExchange()
@@ -583,7 +584,7 @@ int sendDiffieHellmanExchange(int sock) {
         // }
         // printf("\n");
     } else {
-        printf("No server DH response recieved :(\n");
+        printf("No server DH response received :(\n");
         // random error message code
         exit(1);
     }
@@ -672,26 +673,23 @@ RawByteArray *generateNewKeysPacket() {
     unsigned char data = code;
     
     RawByteArray *payloadAndSize = malloc(sizeof(RawByteArray));
+    assert(payloadAndSize != NULL);
+
+    payloadAndSize -> data = malloc(sizeof(code));
+    assert(payloadAndSize -> data != NULL);
+    
     payloadAndSize -> data = &data;
     payloadAndSize -> size = 1;
 
+    // constructPacket frees payloadAndSize and its data
     RawByteArray *packet = constructPacket(payloadAndSize);
-
-    free(payloadAndSize -> data);
-    free(payloadAndSize);
 
     return packet;
 }
 
-// RawByteArray *encrypt_chacha20_poly1305() {
-
-
-//     return 
-// }
-
 // remember to free both data and struct
 // func takes in no arguments bc global variables store required info
-RawByteArray *deriveChaChaKey() {
+RawByteArray *deriveEncryptionKey() {
     int sum = kGlobalLen + hashGlobalLen + 1 + hashGlobalLen; // string to hash is K || H || "B" || session_id
     unsigned char *toHash = malloc(sum);
     
@@ -721,6 +719,85 @@ RawByteArray *deriveChaChaKey() {
     free(toHashAndSize);
 
     return hash;
+}
+
+// RawByteArray *encrypt() {
+
+
+// }
+
+// remember to free struct and data
+RawByteArray *generateHmacSha1(RawByteArray *key, RawByteArray *data, int seqNum) {
+    EVP_MAC *mac_func = NULL;
+    EVP_MAC_CTX *mac_ctx = NULL;
+    OSSL_PARAM params[2];
+    int result = 0;
+
+    RawByteArray *mac = malloc(sizeof(RawByteArray));
+    assert(mac != NULL);
+
+    // hmac-sha1 MAC is 20 bytes
+    mac -> size = 20;
+    mac -> data = malloc(mac -> size);
+    assert(mac->data != NULL);
+
+    seqNum = htonl(seqNum);
+    unsigned char seqNumBytes[4];
+    memcpy(seqNumBytes, &seqNum, sizeof(seqNumBytes));
+
+    // Initialize OpenSSL MAC function for HMAC
+    mac_func = EVP_MAC_fetch(NULL, "HMAC", NULL);
+    if (!mac_func) {
+        fprintf(stderr, "Error initializing MAC function.\n");
+        exit(0);
+    }
+
+    // Create MAC context
+    mac_ctx = EVP_MAC_CTX_new(mac_func);
+    if (!mac_ctx) {
+        fprintf(stderr, "Error creating MAC context.\n");
+        EVP_MAC_free(mac_func);
+        exit(0);
+    }
+
+    // Set parameters: algorithm to HMAC-SHA1 and key
+    params[0] = OSSL_PARAM_construct_utf8_string("digest", "SHA1", 0);
+    params[1] = OSSL_PARAM_construct_end();
+
+    if (EVP_MAC_init(mac_ctx, data -> data, data -> size, params) != 1) {
+        fprintf(stderr, "Error initializing MAC key.\n");
+        goto cleanup;
+    }
+
+    // Update MAC context with sequence number
+    if (EVP_MAC_update(mac_ctx, seqNumBytes, sizeof(seqNumBytes)) != 1) {
+        fprintf(stderr, "Error updating MAC with sequence number.\n");
+        goto cleanup;
+    }
+
+    // Update MAC context with the data
+    if (EVP_MAC_update(mac_ctx, data -> data, data -> size) != 1) {
+        fprintf(stderr, "Error updating MAC with data.\n");
+        goto cleanup;
+    }
+
+    // Finalize the MAC
+    if (EVP_MAC_final(mac_ctx, mac -> data, NULL, mac -> size) != 1) {
+        fprintf(stderr, "Error finalizing MAC.\n");
+        goto cleanup;
+    }
+    
+    result = 1;
+
+cleanup:
+    EVP_MAC_CTX_free(mac_ctx);
+    EVP_MAC_free(mac_func);
+
+    if (!result) {
+        fprintf(stderr, "MAC generation failed.\n");
+    }
+
+    return mac;
 }
 
 size_t writeAlgoList(unsigned char *buffer, const char *list) {
@@ -754,13 +831,13 @@ RawByteArray *constructKexPayload() {
         // server_host_key_algorithms
         "ssh-ed25519", 
         // encryption_algorithms_client_to_server 
-        "chacha20-poly1305@openssh.com",
+        "aes128-ctr",
         // encryption_algorithms_server-to-client
-        "chacha20-poly1305@openssh.com",
+        "aes128-ctr",
         // mac_algorithms_client_to_server
-        "none",
+        "hmac-sha1",
         // mac_algorithms_server_to_client
-        "none",
+        "hmac-sha1",
         // compression_algorithms_client_to_server
         "none",
         // compression_algorithms_server_to_client
@@ -937,29 +1014,42 @@ int start_client(const char *host, const int port) {
         printf("no connection\n");
     }
 
+    uint32_t seqNum = 0;
+
     sendProtocol(sock);
+    seqNum += 1;
 
     sendKexInit(sock);
+    seqNum += 1;
 
     sendDiffieHellmanExchange(sock);
+    seqNum += 1;
     
-    RawByteArray *encryptionKey = deriveChaChaKey();
+    RawByteArray *encryptionKey = deriveEncryptionKey();
 
     printf("ENCRYPTION KEY:\n");
     for (int i = 0; i < encryptionKey -> size; i++) {
         printf("%02x ", encryptionKey -> data[i]);
     }
     printf("\n");
+    
+    RawByteArray *newKeysPacket = generateNewKeysPacket();
 
-    // encrypt_chacha20_poly1305();
+    RawByteArray *mac = generateHmacSha1(encryptionKey, newKeysPacket, seqNum);
 
-    // RawByteArray *newKeysPacket = RawByteArraygenerateNewKeysPacket();
-
+    printf("MAC: \n");
+    for (int i = 0; i < mac -> size; i++) {
+        printf("%02x ", mac -> data[i]);
+    }
+    printf("\n");
+    
     close(sock);
 
     // cleanup
     free(encryptionKey -> data);
     free(encryptionKey);
+    free(mac -> data);
+    free(mac);
 
     return 0;
 }
