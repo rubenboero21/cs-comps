@@ -16,12 +16,16 @@
 #include <openssl/bio.h>
 #include <openssl/pem.h>
 
+// openssl libraries (for encryption/auth)
+#include <openssl/hmac.h>
+
 // IDK WHAT SIZE BUFFER MAKES SENSE, LAWSUS USES 1024 A LOT, SO USING THAT FOR NOW
 #define BUFFER_SIZE 1024
 #define SSH_MSG_KEXINIT 20
 #define SSH_MSG_KEXDH_INIT 30
 #define SSH_MSG_NEWKEYS 21
 #define BLOCKSIZE 16 // if encryption isn't working, check blocksize
+#define SHA1_DIGEST_LENGTH 20
 
 // defining global variables to construct the message to hash (H) as part of server verification
 // excluding K_S, e, f, & k because we have access to those locally in sendDiffieHellmanExchange()
@@ -233,18 +237,18 @@ void printServerDHResponse(unsigned char* payload) {
     printf("\n");
 }
 
-// Adds the leading 2s complement bit if necessary to ensure that e is positive
+// Adds the leading 2s complement byte if necessary to ensure that e is positive
 // remember to free returned rawbytearray data, and then rawbytearray itself
-RawByteArray* addTwosComplementBit(const unsigned char* pub_key, int pub_key_len) {
-    int needs_padding = (pub_key[0] & 0x80) != 0;
-    int mpint_len = pub_key_len + (needs_padding ? 1 : 0);
+RawByteArray* addTwosComplementBit(const unsigned char* pubKey, int pubKeyLen) {
+    int needs_padding = (pubKey[0] & 0x80) != 0;
+    int mpint_len = pubKeyLen + (needs_padding ? 1 : 0);
     
     unsigned char* mpint = malloc(mpint_len);
     if (needs_padding) {
         mpint[0] = 0x00;
-        memcpy(mpint + 1, pub_key, pub_key_len);
+        memcpy(mpint + 1, pubKey, pubKeyLen);
     } else {
-        memcpy(mpint, pub_key, pub_key_len);
+        memcpy(mpint, pubKey, pubKeyLen);
     }
     
     RawByteArray* mpintAndSize = malloc(sizeof(RawByteArray));
@@ -255,7 +259,7 @@ RawByteArray* addTwosComplementBit(const unsigned char* pub_key, int pub_key_len
 }
 
 // Function to compute the SHA-256 hash of a message and return it as a pointer to RawByteArray
-RawByteArray *computeSHA256Hash(const RawByteArray *inputMessage) {
+RawByteArray *computeSHA256Hash(const RawByteArray *message) {
     EVP_MD_CTX *mdctx = EVP_MD_CTX_new();  // Create a message digest context
     const EVP_MD *md = EVP_sha256();       // Specify the SHA-256 algorithm
     RawByteArray *outputHash = malloc(sizeof(RawByteArray));   // Allocate memory for output struct
@@ -277,7 +281,7 @@ RawByteArray *computeSHA256Hash(const RawByteArray *inputMessage) {
     }
 
     // Add the input message to be hashed
-    if (EVP_DigestUpdate(mdctx, inputMessage->data, inputMessage->size) != 1) {
+    if (EVP_DigestUpdate(mdctx, message->data, message->size) != 1) {
         printf("Error: Could not update digest\n");
         EVP_MD_CTX_free(mdctx);
         free(outputHash);
@@ -724,81 +728,30 @@ RawByteArray *deriveKey(char letter) {
 
 // }
 
-// remember to free struct and data
-RawByteArray *generateHmacSha1(RawByteArray *key, RawByteArray *data, int seqNum) {
-    EVP_MAC *mac_func = NULL;
-    EVP_MAC_CTX *mac_ctx = NULL;
-    OSSL_PARAM params[2];
-    int result = 0;
+RawByteArray *compute_hmac_sha1(RawByteArray *integrityKey, RawByteArray *packet, uint32_t sequence_number) {
+    
+    unsigned int macSize;
+    unsigned char data[4 + packet -> size];
+    size_t data_size = 4 + packet->size;
 
     RawByteArray *mac = malloc(sizeof(RawByteArray));
-    assert(mac != NULL);
+    mac -> data = malloc(SHA1_DIGEST_LENGTH);
+    mac -> size = SHA1_DIGEST_LENGTH;
 
-    // hmac-sha1 MAC is 20 bytes
-    mac -> size = 20;
-    mac -> data = malloc(mac -> size);
-    assert(mac->data != NULL);
+    // Copy the sequence number (4 bytes) and packet data into data buffer
+    sequence_number = htonl(sequence_number);
+    memcpy(data, &sequence_number, 4);
+    memcpy(data + 4, packet -> data, packet -> size);
 
-    seqNum = htonl(seqNum);
-    unsigned char seqNumBytes[4];
-    memcpy(seqNumBytes, &seqNum, sizeof(seqNumBytes));
-    printf("SEQ NUM\n");
-    for (int i = 0; i < sizeof(seqNumBytes); i++) {
-        printf("%02x", seqNumBytes[i]);
+    printf("SEQ || NEW KEYS PACKET:\n");
+    for (int i = 0; i < data_size; i++) {
+        printf("%02x", data[i]);
     }
     printf("\n");
+    printf("size of data: %zu\n", data_size);
 
-    // Initialize OpenSSL MAC function for HMAC
-    mac_func = EVP_MAC_fetch(NULL, "HMAC", NULL);
-    if (!mac_func) {
-        fprintf(stderr, "Error initializing MAC function.\n");
-        exit(0);
-    }
-
-    // Create MAC context
-    mac_ctx = EVP_MAC_CTX_new(mac_func);
-    if (!mac_ctx) {
-        fprintf(stderr, "Error creating MAC context.\n");
-        EVP_MAC_free(mac_func);
-        exit(0);
-    }
-
-    // Set parameters: algorithm to HMAC-SHA1 and key
-    params[0] = OSSL_PARAM_construct_utf8_string("digest", "SHA1", 0);
-    params[1] = OSSL_PARAM_construct_end();
-
-    if (EVP_MAC_init(mac_ctx, key -> data, key -> size, params) != 1) {
-        fprintf(stderr, "Error initializing MAC key.\n");
-        goto cleanup;
-    }
-
-    // Update MAC context with sequence number
-    if (EVP_MAC_update(mac_ctx, seqNumBytes, sizeof(seqNumBytes)) != 1) {
-        fprintf(stderr, "Error updating MAC with sequence number.\n");
-        goto cleanup;
-    }
-
-    // Update MAC context with the data
-    if (EVP_MAC_update(mac_ctx, data -> data, data -> size) != 1) {
-        fprintf(stderr, "Error updating MAC with data.\n");
-        goto cleanup;
-    }
-
-    // Finalize the MAC
-    if (EVP_MAC_final(mac_ctx, mac -> data, NULL, mac -> size) != 1) {
-        fprintf(stderr, "Error finalizing MAC.\n");
-        goto cleanup;
-    }
-    
-    result = 1;
-
-cleanup:
-    EVP_MAC_CTX_free(mac_ctx);
-    EVP_MAC_free(mac_func);
-
-    if (!result) {
-        fprintf(stderr, "MAC generation failed.\n");
-    }
+    // Compute HMAC-SHA1
+    HMAC(EVP_sha1(), integrityKey -> data, integrityKey -> size, data, data_size, mac -> data, &macSize);
 
     return mac;
 }
@@ -998,7 +951,7 @@ int sendKexInit (int sock) {
     return 0;
 }
 
-int start_client(const char *host, const int port) {
+int startClient(const char *host, const int port) {
     struct sockaddr_in address;
     int sock = 0;
 
@@ -1057,14 +1010,14 @@ int start_client(const char *host, const int port) {
     }
     printf("\n");
 
-    RawByteArray *mac = generateHmacSha1(integrityKey, newKeysPacket, seqNum);
+    RawByteArray *mac = compute_hmac_sha1(integrityKey, newKeysPacket, seqNum);
 
     printf("MAC: \n");
     for (int i = 0; i < mac -> size; i++) {
         printf("%02x ", mac -> data[i]);
     }
     printf("\n");
-    
+
     close(sock);
 
     // cleanup
@@ -1087,7 +1040,7 @@ int main(int argc, char **argv) {
     const char *host = argv[1];
     const int port = atoi(argv[2]);
 
-    start_client(host, port);
+    startClient(host, port);
 
     // free global variables
     free(V_C);
