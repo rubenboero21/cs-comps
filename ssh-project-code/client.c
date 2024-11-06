@@ -15,7 +15,6 @@
 #include <openssl/err.h>
 #include <openssl/bio.h>
 #include <openssl/pem.h>
-#include <openssl/kdf.h>
 
 // IDK WHAT SIZE BUFFER MAKES SENSE, LAWSUS USES 1024 A LOT, SO USING THAT FOR NOW
 #define BUFFER_SIZE 1024
@@ -675,7 +674,7 @@ RawByteArray *generateNewKeysPacket() {
     RawByteArray *payloadAndSize = malloc(sizeof(RawByteArray));
     assert(payloadAndSize != NULL);
 
-    payloadAndSize -> data = malloc(sizeof(code));
+    payloadAndSize -> data = malloc(sizeof(data));
     assert(payloadAndSize -> data != NULL);
     
     payloadAndSize -> data = &data;
@@ -688,8 +687,8 @@ RawByteArray *generateNewKeysPacket() {
 }
 
 // remember to free both data and struct
-// func takes in no arguments bc global variables store required info
-RawByteArray *deriveEncryptionKey() {
+// func only takes in letter bc global variables store other required info
+RawByteArray *deriveKey(char letter) {
     int sum = kGlobalLen + hashGlobalLen + 1 + hashGlobalLen; // string to hash is K || H || "B" || session_id
     unsigned char *toHash = malloc(sum);
     
@@ -698,7 +697,7 @@ RawByteArray *deriveEncryptionKey() {
     offset += kGlobalLen;
     memcpy(toHash + offset, hashGlobal, hashGlobalLen);
     offset += hashGlobalLen;
-    toHash[offset] = 'C';
+    toHash[offset] = letter;
     // memcpy(toHash + offset, 'C', sizeof(char));
     offset += sizeof(char);
     memcpy(toHash + offset, hashGlobal, hashGlobalLen);
@@ -744,6 +743,12 @@ RawByteArray *generateHmacSha1(RawByteArray *key, RawByteArray *data, int seqNum
     seqNum = htonl(seqNum);
     unsigned char seqNumBytes[4];
     memcpy(seqNumBytes, &seqNum, sizeof(seqNumBytes));
+    printf("SEQ NUM\n");
+    for (int i = 0; i < sizeof(seqNumBytes); i++) {
+        printf("%02x", seqNumBytes[i]);
+    }
+    printf("\n");
+    
 
     // Initialize OpenSSL MAC function for HMAC
     mac_func = EVP_MAC_fetch(NULL, "HMAC", NULL);
@@ -764,7 +769,7 @@ RawByteArray *generateHmacSha1(RawByteArray *key, RawByteArray *data, int seqNum
     params[0] = OSSL_PARAM_construct_utf8_string("digest", "SHA1", 0);
     params[1] = OSSL_PARAM_construct_end();
 
-    if (EVP_MAC_init(mac_ctx, data -> data, data -> size, params) != 1) {
+    if (EVP_MAC_init(mac_ctx, key -> data, key -> size, params) != 1) {
         fprintf(stderr, "Error initializing MAC key.\n");
         goto cleanup;
     }
@@ -1024,18 +1029,36 @@ int start_client(const char *host, const int port) {
 
     sendDiffieHellmanExchange(sock);
     seqNum += 1;
+
+    // MOVE UNECESSARY STUFF OUT OF START CLIENT AND INTO ITS OWN FUNCTION
+    // keep start client clean
     
-    RawByteArray *encryptionKey = deriveEncryptionKey();
+    RawByteArray *encryptionKey = deriveKey('C');
 
     printf("ENCRYPTION KEY:\n");
     for (int i = 0; i < encryptionKey -> size; i++) {
-        printf("%02x ", encryptionKey -> data[i]);
+        printf("%02x", encryptionKey -> data[i]);
     }
     printf("\n");
     
     RawByteArray *newKeysPacket = generateNewKeysPacket();
+    printf("NEW KEYS PACKET:\n");
+    for (int i = 0; i < newKeysPacket -> size; i++) {
+        printf("%02x", newKeysPacket -> data[i]);
+    }
+    printf("\n");
 
-    RawByteArray *mac = generateHmacSha1(encryptionKey, newKeysPacket, seqNum);
+    // derive key uses sha256, so output is 32 bytes, our mac algo only wants 20 byte key,
+    // so truncate the output by setting size to 20
+    RawByteArray *integrityKey = deriveKey('E');
+    integrityKey -> size = 20;
+    printf("INTEGRITY KEY:\n");
+    for (int i = 0; i < integrityKey -> size; i++) {
+        printf("%02x", integrityKey -> data[i]);
+    }
+    printf("\n");
+
+    RawByteArray *mac = generateHmacSha1(integrityKey, newKeysPacket, seqNum);
 
     printf("MAC: \n");
     for (int i = 0; i < mac -> size; i++) {
@@ -1048,6 +1071,8 @@ int start_client(const char *host, const int port) {
     // cleanup
     free(encryptionKey -> data);
     free(encryptionKey);
+    free(integrityKey -> data);
+    free(integrityKey);
     free(mac -> data);
     free(mac);
 
