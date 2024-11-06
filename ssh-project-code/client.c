@@ -698,7 +698,6 @@ RawByteArray *deriveKey(char letter) {
     memcpy(toHash + offset, hashGlobal, hashGlobalLen);
     offset += hashGlobalLen;
     toHash[offset] = letter;
-    // memcpy(toHash + offset, 'C', sizeof(char));
     offset += sizeof(char);
     memcpy(toHash + offset, hashGlobal, hashGlobalLen);
 
@@ -748,7 +747,6 @@ RawByteArray *generateHmacSha1(RawByteArray *key, RawByteArray *data, int seqNum
         printf("%02x", seqNumBytes[i]);
     }
     printf("\n");
-    
 
     // Initialize OpenSSL MAC function for HMAC
     mac_func = EVP_MAC_fetch(NULL, "HMAC", NULL);
@@ -1034,6 +1032,7 @@ int start_client(const char *host, const int port) {
     // keep start client clean
     
     RawByteArray *encryptionKey = deriveKey('C');
+    encryptionKey -> size = 16;
 
     printf("ENCRYPTION KEY:\n");
     for (int i = 0; i < encryptionKey -> size; i++) {
