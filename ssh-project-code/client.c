@@ -1049,6 +1049,8 @@ int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
 
     EVP_EncryptInit_ex(encryptCtx, EVP_aes_128_ctr(), NULL, encKeyCtoS -> data, ivCtoS -> data);
     EVP_DecryptInit_ex(decryptCtx, EVP_aes_128_ctr(), NULL, encKeyStoC -> data, ivStoC -> data);
+    // below init is for checking that we are encrypting correctly
+    // EVP_DecryptInit_ex(decryptCtx, EVP_aes_128_ctr(), NULL, encKeyCtoS -> data, ivCtoS -> data);
 
     RawByteArray *ciphertext = aes128EncryptDecrypt(encryptCtx, newKeysPacket, 1);
 
@@ -1057,6 +1059,20 @@ int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
         printf("%02x ", ciphertext -> data[i]);
     }
     printf("\n");
+
+    // cat MAC to end of ciphertext and send to server
+    int bufferSize = mac -> size + ciphertext -> size;
+    unsigned char buffer[bufferSize];
+    memcpy(buffer, ciphertext -> data, ciphertext -> size);
+    memcpy(buffer + mac -> size, mac -> data, mac -> size);
+
+    int sentBytes = send(sock, buffer, bufferSize, 0);
+
+    if (sentBytes != -1) {
+        printf("Successful encrypted newkeys packet send! Number of bytes sent: %i\n", sentBytes);
+    } else {
+        printf("Send did not complete successfully.\n");
+    }
 
     // this output won't make sense until we replace ciphertext with the server's response
     RawByteArray *plaintext = aes128EncryptDecrypt(decryptCtx, ciphertext, 0);
