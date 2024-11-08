@@ -1,7 +1,7 @@
 # CFLAGS = -Wall
 # If we want to use a library to help with DH, need to include it in compile command:
 # this will only work for Ruben's setup, need to change paths to match your installation of openssl
-CFLAGS = -Wall -I/opt/homebrew/opt/openssl@3/include -L/opt/homebrew/opt/openssl@3/lib -lssl -lcrypto
+CFLAGS = -Wall -Wno-deprecated-declarations -I/opt/homebrew/opt/openssl@3/include -L/opt/homebrew/opt/openssl@3/lib -lssl -lcrypto 
 
 # Compile and run the program
 run: a.out
