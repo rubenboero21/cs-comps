@@ -35,7 +35,7 @@ Output: A RawByteArray struct containing the payload and the size
 RawByteArray *constructKexPayload();
 
 /*
-Input: The socket to send the protocol packet to
+Input sock: The socket to send the protocol packet to
 Output:
 */
 int sendProtocol(int sock);
@@ -56,6 +56,7 @@ int sendKexInit (int sock);
 /*
 Input: A host and port number to connect to 
 Output: SOME ERROR CODES - NEED TO UPDATE
+This function is a control function that calls the necessary steps of the SSH exchange
 */
 int startClient(const char *host, const int port);
 
@@ -170,6 +171,20 @@ Returns: SOME ERROR CODE
 */
 int sendKexInit (int sock);
 
-// ADD MAC FUNCTION ONCE ITS WORKING
+/*
+Input ctx: an EVP cipher context that contains the encryption key and IV
+Input message: the message to encrypt or decrypt
+Input encrypt: 1 for encrypt mode, 0 for decrypt mode
+Returns a pointer to a RawByteArray struct which contains the result of the encrypt/decrypt
+operation
+Remember to free both the RawByteArray and RawByteArray data
+*/
+RawByteArray *aes128EncryptDecrypt(EVP_CIPHER_CTX *ctx, RawByteArray *message, int encrypt);
 
-// ADD ENCRYPT/DECRYPT FUNCTION
+/*
+Input sock: the socket to send/receive encrypted data to/from
+Input seqNum: the sequence number, used in computing MAC
+*/
+int sendReceiveEncryptedData(int sock, uint32_t *seqNum);
+
+// ADD MAC FUNCTION ONCE ITS WORKING
