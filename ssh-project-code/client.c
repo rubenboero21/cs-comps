@@ -680,12 +680,15 @@ RawByteArray *generateNewKeysPacket() {
 
     payloadAndSize -> data = malloc(sizeof(data));
     assert(payloadAndSize -> data != NULL);
-    
-    payloadAndSize -> data = &data;
-    payloadAndSize -> size = 1;
+
+    payloadAndSize->data[0] = code;
+    payloadAndSize -> size = sizeof(data);
 
     // constructPacket frees payloadAndSize and its data
     RawByteArray *packet = constructPacket(payloadAndSize);
+
+    free(payloadAndSize -> data);
+    free(payloadAndSize);
 
     return packet;
 }
@@ -723,13 +726,39 @@ RawByteArray *deriveKey(char letter) {
     return hash;
 }
 
-// RawByteArray *encrypt() {
+// hard coded to encrypt using aes128-ctr
+// pass in 1 for encrypt, 0 for decrypt
+// remember to free struct and data
+// there is no easy way to get the updated IV out of the context, consider passing in 
+// the ctx so that it persists between function calls 
+RawByteArray *aes128EncryptDecrypt(EVP_CIPHER_CTX *ctx, RawByteArray *message, RawByteArray *key, RawByteArray *iv, int encrypt) {
+    int len = 0;
+    RawByteArray *result = malloc(sizeof(RawByteArray));
+    assert(result != NULL);
 
+    // Initialize result with length and data set to NULL (in case of an error)
+    result -> data = NULL;
+    result -> size = 0;
 
-// }
+    // Allocate memory for the ciphertext/plaintext (they are the same length for aes128ctr)
+    result -> data = malloc(message -> size);
+    assert(result -> data != NULL);
 
+    // Choose the correct operation based on the 'encrypt' flag (1 for encryption, 0 for decryption)
+    if (encrypt) {
+        EVP_EncryptUpdate(ctx, result->data, &len, message->data, message->size);
+
+    } else {
+        EVP_DecryptUpdate(ctx, result->data, &len, message->data, message->size);
+    }
+
+    result -> size = len;
+
+    return result;
+}
+
+// THIS DOES NOT WORK YET
 RawByteArray *compute_hmac_sha1(RawByteArray *integrityKey, RawByteArray *packet, uint32_t sequence_number) {
-    
     unsigned int macSize;
     unsigned char data[4 + packet -> size];
     size_t data_size = 4 + packet->size;
@@ -752,6 +781,9 @@ RawByteArray *compute_hmac_sha1(RawByteArray *integrityKey, RawByteArray *packet
 
     // Compute HMAC-SHA1
     HMAC(EVP_sha1(), integrityKey -> data, integrityKey -> size, data, data_size, mac -> data, &macSize);
+    
+    // delete macSize when not using this print out, its the only place its used
+    printf("mac size (should be 20): %i\n", macSize);
 
     return mac;
 }
@@ -984,12 +1016,25 @@ int startClient(const char *host, const int port) {
     // MOVE UNECESSARY STUFF OUT OF START CLIENT AND INTO ITS OWN FUNCTION
     // keep start client clean
     
-    RawByteArray *encryptionKey = deriveKey('C');
-    encryptionKey -> size = 16;
+    RawByteArray *encKeyCtoS = deriveKey('C');
+    encKeyCtoS -> size = 16;
+    RawByteArray *encKeyStoC = deriveKey('D');
+    encKeyStoC -> size = 16;
 
-    printf("ENCRYPTION KEY:\n");
-    for (int i = 0; i < encryptionKey -> size; i++) {
-        printf("%02x", encryptionKey -> data[i]);
+    printf("C to S ENCRYPTION KEY:\n");
+    for (int i = 0; i < encKeyCtoS -> size; i++) {
+        printf("%02x", encKeyCtoS -> data[i]);
+    }
+    printf("\n");
+
+    RawByteArray *ivCtoS = deriveKey('A');
+    ivCtoS -> size = 16;
+    RawByteArray *ivStoC = deriveKey('B');
+    ivStoC -> size = 16;
+
+    printf("C to S IV:\n");
+    for (int i = 0; i < ivCtoS -> size; i++) {
+        printf("%02x", ivCtoS -> data[i]);
     }
     printf("\n");
     
@@ -1004,12 +1049,16 @@ int startClient(const char *host, const int port) {
     // so truncate the output by setting size to 20
     RawByteArray *integrityKey = deriveKey('E');
     integrityKey -> size = 20;
+    // we aren't computing the server to client integrity key because we don't plan
+    // on having out client check the server's MAC (for now)
+
     printf("INTEGRITY KEY:\n");
     for (int i = 0; i < integrityKey -> size; i++) {
         printf("%02x", integrityKey -> data[i]);
     }
     printf("\n");
 
+    // MAC IS NOT CORRECT, FUNCTION BROKEN wahhhh
     RawByteArray *mac = compute_hmac_sha1(integrityKey, newKeysPacket, seqNum);
 
     printf("MAC: \n");
@@ -1018,15 +1067,54 @@ int startClient(const char *host, const int port) {
     }
     printf("\n");
 
-    close(sock);
+    // initialize the contexts we will use for encryption and decryption
+    EVP_CIPHER_CTX *encryptCtx;
+    encryptCtx = EVP_CIPHER_CTX_new();
+
+    EVP_CIPHER_CTX *decryptCtx;
+    decryptCtx = EVP_CIPHER_CTX_new();
+
+    EVP_EncryptInit_ex(encryptCtx, EVP_aes_128_ctr(), NULL, encKeyCtoS -> data, ivCtoS -> data);
+    EVP_DecryptInit_ex(decryptCtx, EVP_aes_128_ctr(), NULL, encKeyStoC -> data, ivStoC -> data);
+
+    RawByteArray *ciphertext = aes128EncryptDecrypt(encryptCtx, newKeysPacket, encKeyCtoS, ivCtoS, 1);
+
+    printf("ciphertext:\n");
+    for (int i = 0; i < ciphertext -> size; i++) {
+        printf("%02x ", ciphertext -> data[i]);
+    }
+    printf("\n");
+
+    // this output won't make sense until we replace ciphertext with the server's response
+    RawByteArray *plaintext = aes128EncryptDecrypt(decryptCtx, ciphertext, encKeyStoC, ivStoC, 0);
+
+    printf("plaintext:\n");
+    for (int i = 0; i < plaintext -> size; i++) {
+        printf("%02x ", plaintext -> data[i]);
+    }
+    printf("\n");
 
     // cleanup
-    free(encryptionKey -> data);
-    free(encryptionKey);
+    free(newKeysPacket -> data);
+    free(newKeysPacket);
+    free(encKeyCtoS -> data);
+    free(encKeyCtoS);
+    free(encKeyStoC -> data);
+    free(encKeyStoC);
+    free(ivCtoS -> data);
+    free(ivCtoS);
+    free(ivStoC -> data);
+    free(ivStoC);
     free(integrityKey -> data);
     free(integrityKey);
     free(mac -> data);
     free(mac);
+    free(ciphertext -> data);
+    free(ciphertext);
+    free(plaintext -> data);
+    free(plaintext);
+    EVP_CIPHER_CTX_free(encryptCtx);
+    EVP_CIPHER_CTX_free(decryptCtx);
 
     return 0;
 }
