@@ -757,8 +757,8 @@ RawByteArray *aes128EncryptDecrypt(EVP_CIPHER_CTX *ctx, RawByteArray *message, i
     return result;
 }
 
-// THIS DOES NOT WORK YET
-RawByteArray *compute_hmac_sha1(RawByteArray *integrityKey, RawByteArray *packet, uint32_t sequence_number) {
+// remember to free data and struct
+RawByteArray *computeHmacSha1(RawByteArray *integrityKey, RawByteArray *packet, uint32_t sequenceNumber) {
     unsigned int macSize;
     unsigned char data[4 + packet -> size];
     size_t data_size = 4 + packet->size;
@@ -768,8 +768,8 @@ RawByteArray *compute_hmac_sha1(RawByteArray *integrityKey, RawByteArray *packet
     mac -> size = SHA1_DIGEST_LENGTH;
 
     // Copy the sequence number (4 bytes) and packet data into data buffer
-    sequence_number = htonl(sequence_number);
-    memcpy(data, &sequence_number, 4);
+    sequenceNumber = htonl(sequenceNumber);
+    memcpy(data, &sequenceNumber, 4);
     memcpy(data + 4, packet -> data, packet -> size);
 
     printf("SEQ || NEW KEYS PACKET:\n");
@@ -987,7 +987,6 @@ int sendKexInit (int sock) {
 // NOTES: 
 //   - unsure whether EVP will increment the iv
 //   - encryption/decryption is untested to/from server
-//   - MAC still no worky (we think)
 int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
     RawByteArray *encKeyCtoS = deriveKey('C');
     encKeyCtoS -> size = 16;
@@ -1032,7 +1031,7 @@ int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
     printf("\n");
 
     // MAC IS NOT CORRECT, FUNCTION BROKEN wahhhh
-    RawByteArray *mac = compute_hmac_sha1(integrityKey, newKeysPacket, *seqNum);
+    RawByteArray *mac = computeHmacSha1(integrityKey, newKeysPacket, *seqNum);
 
     printf("MAC: \n");
     for (int i = 0; i < mac -> size; i++) {
