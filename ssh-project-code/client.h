@@ -184,6 +184,8 @@ RawByteArray *aes128EncryptDecrypt(EVP_CIPHER_CTX *ctx, RawByteArray *message, i
 /*
 Input sock: the socket to send/receive encrypted data to/from
 Input seqNum: the sequence number, used in computing MAC
+Returns SOME ERROR CODE - update later
+Control function for encryption and MAC messages (post DH messages)
 */
 int sendReceiveEncryptedData(int sock, uint32_t *seqNum);
 
