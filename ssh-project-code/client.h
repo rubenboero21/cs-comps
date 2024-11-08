@@ -191,4 +191,11 @@ Control function for encryption and MAC messages (post DH messages)
 */
 int sendReceiveEncryptedData(int sock, uint32_t *seqNum);
 
-// ADD MAC FUNCTION ONCE ITS WORKING
+/*
+Input integrityKey: the integrity key used to compute MAC
+Input packet: the packet to compute MAC of
+Input sequenceNumber: the sequence number of the packet to compute MAC of
+Returns a pointer to a RawByteArray struct which contains the MAC
+Remember to free both the RawByteArray and RawByteArray data
+*/
+RawByteArray *computeHmacSha1(RawByteArray *integrityKey, RawByteArray *packet, uint32_t sequenceNumber);
