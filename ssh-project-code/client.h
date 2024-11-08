@@ -1,3 +1,5 @@
+#include <openssl/evp.h>
+
 // a struct to hold data and its size
 typedef struct {
     unsigned char *data;
