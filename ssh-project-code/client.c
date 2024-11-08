@@ -731,7 +731,7 @@ RawByteArray *deriveKey(char letter) {
 // remember to free struct and data
 // there is no easy way to get the updated IV out of the context, consider passing in 
 // the ctx so that it persists between function calls 
-RawByteArray *aes128EncryptDecrypt(EVP_CIPHER_CTX *ctx, RawByteArray *message, RawByteArray *key, RawByteArray *iv, int encrypt) {
+RawByteArray *aes128EncryptDecrypt(EVP_CIPHER_CTX *ctx, RawByteArray *message, int encrypt) {
     int len = 0;
     RawByteArray *result = malloc(sizeof(RawByteArray));
     assert(result != NULL);
@@ -983,39 +983,12 @@ int sendKexInit (int sock) {
     return 0;
 }
 
-int startClient(const char *host, const int port) {
-    struct sockaddr_in address;
-    int sock = 0;
-
-    sock = socket(AF_INET, SOCK_STREAM, 0);
-
-    address.sin_family = AF_INET;
-    address.sin_port = htons(22); // THIS IS THE PORT THAT THE CLIENT CONNECTS TO
-    // inet_pton(AF_INET, "127.0.0.1", &address.sin_addr); // this is the host address to connect to
-    inet_pton(AF_INET, host, &address.sin_addr);
-
-    int output = connect(sock, (struct sockaddr *)&address, sizeof(address));
-    
-    if (output == 0) {
-        printf("successful connection\n");
-    } else {
-        printf("no connection\n");
-    }
-
-    uint32_t seqNum = 0;
-
-    sendProtocol(sock);
-    seqNum += 1;
-
-    sendKexInit(sock);
-    seqNum += 1;
-
-    sendDiffieHellmanExchange(sock);
-    seqNum += 1;
-
-    // MOVE UNECESSARY STUFF OUT OF START CLIENT AND INTO ITS OWN FUNCTION
-    // keep start client clean
-    
+// control function for encryption and MAC messages (post DH messages)
+// NOTES: 
+//   - unsure whether EVP will increment the iv
+//   - encryption/decryption is untested to/from server
+//   - MAC still no worky (we think)
+int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
     RawByteArray *encKeyCtoS = deriveKey('C');
     encKeyCtoS -> size = 16;
     RawByteArray *encKeyStoC = deriveKey('D');
@@ -1059,7 +1032,7 @@ int startClient(const char *host, const int port) {
     printf("\n");
 
     // MAC IS NOT CORRECT, FUNCTION BROKEN wahhhh
-    RawByteArray *mac = compute_hmac_sha1(integrityKey, newKeysPacket, seqNum);
+    RawByteArray *mac = compute_hmac_sha1(integrityKey, newKeysPacket, *seqNum);
 
     printf("MAC: \n");
     for (int i = 0; i < mac -> size; i++) {
@@ -1077,7 +1050,7 @@ int startClient(const char *host, const int port) {
     EVP_EncryptInit_ex(encryptCtx, EVP_aes_128_ctr(), NULL, encKeyCtoS -> data, ivCtoS -> data);
     EVP_DecryptInit_ex(decryptCtx, EVP_aes_128_ctr(), NULL, encKeyStoC -> data, ivStoC -> data);
 
-    RawByteArray *ciphertext = aes128EncryptDecrypt(encryptCtx, newKeysPacket, encKeyCtoS, ivCtoS, 1);
+    RawByteArray *ciphertext = aes128EncryptDecrypt(encryptCtx, newKeysPacket, 1);
 
     printf("ciphertext:\n");
     for (int i = 0; i < ciphertext -> size; i++) {
@@ -1086,7 +1059,7 @@ int startClient(const char *host, const int port) {
     printf("\n");
 
     // this output won't make sense until we replace ciphertext with the server's response
-    RawByteArray *plaintext = aes128EncryptDecrypt(decryptCtx, ciphertext, encKeyStoC, ivStoC, 0);
+    RawByteArray *plaintext = aes128EncryptDecrypt(decryptCtx, ciphertext, 0);
 
     printf("plaintext:\n");
     for (int i = 0; i < plaintext -> size; i++) {
@@ -1115,6 +1088,41 @@ int startClient(const char *host, const int port) {
     free(plaintext);
     EVP_CIPHER_CTX_free(encryptCtx);
     EVP_CIPHER_CTX_free(decryptCtx);
+
+    return 0;
+}
+
+int startClient(const char *host, const int port) {
+    struct sockaddr_in address;
+    int sock = 0;
+
+    sock = socket(AF_INET, SOCK_STREAM, 0);
+
+    address.sin_family = AF_INET;
+    address.sin_port = htons(22); // THIS IS THE PORT THAT THE CLIENT CONNECTS TO
+    // inet_pton(AF_INET, "127.0.0.1", &address.sin_addr); // this is the host address to connect to
+    inet_pton(AF_INET, host, &address.sin_addr);
+
+    int output = connect(sock, (struct sockaddr *)&address, sizeof(address));
+    
+    if (output == 0) {
+        printf("successful connection\n");
+    } else {
+        printf("no connection\n");
+    }
+
+    uint32_t seqNum = 0;
+
+    sendProtocol(sock);
+    seqNum += 1;
+
+    sendKexInit(sock);
+    seqNum += 1;
+
+    sendDiffieHellmanExchange(sock);
+    seqNum += 1;
+
+    sendReceiveEncryptedData(sock, &seqNum);
 
     return 0;
 }
