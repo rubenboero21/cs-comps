@@ -24,7 +24,7 @@
 #define SSH_MSG_KEXINIT 20
 #define SSH_MSG_KEXDH_INIT 30
 #define SSH_MSG_NEWKEYS 21
-#define BLOCKSIZE 16 // if encryption isn't working, check blocksize
+#define BLOCKSIZE 8 // if encryption isn't working, check blocksize
 #define SHA1_DIGEST_LENGTH 20
 
 // defining global variables to construct the message to hash (H) as part of server verification
@@ -1030,7 +1030,6 @@ int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
     }
     printf("\n");
 
-    // MAC IS NOT CORRECT, FUNCTION BROKEN wahhhh
     RawByteArray *mac = computeHmacSha1(integrityKey, newKeysPacket, *seqNum);
 
     printf("MAC: \n");
@@ -1063,7 +1062,13 @@ int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
     int bufferSize = mac -> size + ciphertext -> size;
     unsigned char buffer[bufferSize];
     memcpy(buffer, ciphertext -> data, ciphertext -> size);
-    memcpy(buffer + mac -> size, mac -> data, mac -> size);
+    memcpy(buffer + ciphertext -> size, mac -> data, mac -> size);
+
+    printf("message to send:\n");
+    for (int i = 0; i < sizeof(buffer); i++) {
+        printf("%02x ", buffer[i]);
+    }
+    printf("\n");
 
     int sentBytes = send(sock, buffer, bufferSize, 0);
 
