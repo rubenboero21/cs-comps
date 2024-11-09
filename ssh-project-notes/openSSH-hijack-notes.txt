@@ -21,3 +21,8 @@ Files modified
     kexgexc.c - no output (bc this is the client version)
     kexgexs.c - no output the server version (idk why this one doesn't work, may not be right function)
     mac.c - printing out info about MAC: key, sequence number, packet info
+    packet.c 
+        - printing packet len and encrypted packet in ssh_packet_process_incoming
+        - ssh_packet_read_poll2 decrypts and does verification
+                - currently failing a length check here halfway through function
+                - line 1629 in github
