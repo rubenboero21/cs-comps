@@ -199,3 +199,12 @@ Returns a pointer to a RawByteArray struct which contains the MAC
 Remember to free both the RawByteArray and RawByteArray data
 */
 RawByteArray *computeHmacSha1(RawByteArray *integrityKey, RawByteArray *packet, uint32_t sequenceNumber);
+
+/*
+Input sock: the socket to send the protocol packet to
+Returns: SOME ERROR CODES - NEED TO UPDATE
+*/
+int sendNewKeysPacket(int sock);
+
+
+// add sendUserAuthReq function
