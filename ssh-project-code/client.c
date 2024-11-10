@@ -24,7 +24,8 @@
 #define SSH_MSG_KEXINIT 20
 #define SSH_MSG_KEXDH_INIT 30
 #define SSH_MSG_NEWKEYS 21
-#define BLOCKSIZE 8 // if encryption isn't working, check blocksize
+#define SSH_MSG_USERAUTH_REQUEST 50
+#define BLOCKSIZE 16 // if encryption isn't working, check blocksize
 #define SHA1_DIGEST_LENGTH 20
 
 // defining global variables to construct the message to hash (H) as part of server verification
@@ -772,9 +773,9 @@ RawByteArray *computeHmacSha1(RawByteArray *integrityKey, RawByteArray *packet, 
     memcpy(data, &sequenceNumber, 4);
     memcpy(data + 4, packet -> data, packet -> size);
 
-    printf("SEQ || NEW KEYS PACKET:\n");
+    printf("SEQ || unencrypted message:\n");
     for (int i = 0; i < data_size; i++) {
-        printf("%02x", data[i]);
+        printf("%02x ", data[i]);
     }
     printf("\n");
     printf("size of data: %zu\n", data_size);
@@ -983,6 +984,98 @@ int sendKexInit (int sock) {
     return 0;
 }
 
+int sendUserAuthReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integrityKey, uint32_t seqNum) {
+    RawByteArray *userAuthReq = malloc(sizeof(RawByteArray));
+    assert(userAuthReq != NULL);
+
+    // hard coding values for username and password, get them from user later
+    unsigned char username[4] = "kali";
+    unsigned char password[4] = "kali";
+    
+    unsigned char serviceName[14] = "ssh-connection";
+    unsigned char methodName[8] = "password";
+
+    // first +1 is for message code byte, 2nd +1 is for false boolean
+    userAuthReq -> size = 1 + (sizeof(uint32_t) + sizeof(username)) + (sizeof(uint32_t) + sizeof(serviceName)) + (sizeof(uint32_t) + sizeof(methodName)) + 1 + (sizeof(uint32_t) + sizeof(password));    
+    userAuthReq -> data = malloc(userAuthReq -> size);
+
+    // construct userAuthBuffer
+    unsigned userAuthBuffer[userAuthReq -> size];
+    int offset = 0;
+    uint32_t size = 0;
+    userAuthBuffer[offset] = SSH_MSG_USERAUTH_REQUEST;
+    offset += 1;
+    size = htonl(sizeof(username));
+    memcpy(userAuthBuffer + offset, &size, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+    memcpy(userAuthBuffer + offset, username, sizeof(username));
+    offset += sizeof(username);
+    size = htonl(sizeof(serviceName));
+    memcpy(userAuthBuffer + offset, &size, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+    memcpy(userAuthBuffer + offset, serviceName, sizeof(serviceName));
+    offset += sizeof(serviceName);
+    size = htonl(sizeof(methodName));
+    memcpy(userAuthBuffer + offset, &size, sizeof(uint32_t));
+    offset += sizeof(uint32_t); 
+    memcpy(userAuthBuffer + offset, methodName, sizeof(methodName));
+    offset += sizeof(methodName);
+    userAuthBuffer[offset] = 0;
+    offset += 1;
+    size = htonl(sizeof(password));
+    memcpy(userAuthBuffer + offset, &size, sizeof(uint32_t));
+    offset += sizeof(uint32_t); 
+    memcpy(userAuthBuffer + offset, password, sizeof(password));
+
+    memcpy(userAuthReq -> data, userAuthBuffer, userAuthReq -> size);
+
+    RawByteArray *userAuthReqPacket = constructPacket(userAuthReq);
+
+    RawByteArray *ciphertext = aes128EncryptDecrypt(encryptCtx, userAuthReqPacket, 1);
+
+    printf("ciphertext:\n");
+    for (int i = 0; i < ciphertext -> size; i++) {
+        printf("%02x ", ciphertext -> data[i]);
+    }
+    printf("\n");
+
+    // replace newkeys with what we want to actually send
+    RawByteArray *mac = computeHmacSha1(integrityKey, userAuthReqPacket, seqNum);
+
+    printf("MAC: \n");
+    for (int i = 0; i < mac -> size; i++) {
+        printf("%02x ", mac -> data[i]);
+    }
+    printf("\n");
+
+    // cat MAC to end of ciphertext and send to server
+    int encMsgBufferSize = mac -> size + ciphertext -> size;
+    unsigned char encMsgBuffer[encMsgBufferSize];
+    memcpy(encMsgBuffer, ciphertext -> data, ciphertext -> size);
+    memcpy(encMsgBuffer + ciphertext -> size, mac -> data, mac -> size);
+
+    printf("message to send:\n");
+    for (int i = 0; i < sizeof(encMsgBuffer); i++) {
+        printf("%02x ", encMsgBuffer[i]);
+    }
+    printf("\n");
+
+    // SEEMS LIKE MAC IS GETTING CUT OFF, CAUSING CORRUPTED ERROR ON SERVER, check len
+    int sentBytes = send(sock, encMsgBuffer, encMsgBufferSize, 0);
+
+    if (sentBytes != -1) {
+        printf("Successful encrypted user auth packet send! Number of bytes sent: %i\n", sentBytes);
+    } else {
+        printf("Send did not complete successfully.\n");
+    }
+
+    // cleanup
+    free(userAuthReq -> data);
+    free(userAuthReq);
+
+    return 0;
+}
+
 // control function for encryption and MAC messages (post DH messages)
 // NOTES: 
 //   - unsure whether EVP will increment the iv
@@ -999,6 +1092,12 @@ int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
     }
     printf("\n");
 
+    printf("S to C ENCRYPTION KEY:\n");
+    for (int i = 0; i < encKeyStoC -> size; i++) {
+        printf("%02x", encKeyStoC -> data[i]);
+    }
+    printf("\n");
+
     RawByteArray *ivCtoS = deriveKey('A');
     ivCtoS -> size = 16;
     RawByteArray *ivStoC = deriveKey('B');
@@ -1009,14 +1108,13 @@ int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
         printf("%02x", ivCtoS -> data[i]);
     }
     printf("\n");
-    
-    RawByteArray *newKeysPacket = generateNewKeysPacket();
-    printf("NEW KEYS PACKET:\n");
-    for (int i = 0; i < newKeysPacket -> size; i++) {
-        printf("%02x", newKeysPacket -> data[i]);
+
+    printf("S to C IV:\n");
+    for (int i = 0; i < ivStoC -> size; i++) {
+        printf("%02x", ivStoC -> data[i]);
     }
     printf("\n");
-
+    
     // derive key uses sha256, so output is 32 bytes, our mac algo only wants 20 byte key,
     // so truncate the output by setting size to 20
     RawByteArray *integrityKey = deriveKey('E');
@@ -1030,17 +1128,10 @@ int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
     }
     printf("\n");
 
-    RawByteArray *mac = computeHmacSha1(integrityKey, newKeysPacket, *seqNum);
-
-    printf("MAC: \n");
-    for (int i = 0; i < mac -> size; i++) {
-        printf("%02x ", mac -> data[i]);
-    }
-    printf("\n");
-
     // initialize the contexts we will use for encryption and decryption
     EVP_CIPHER_CTX *encryptCtx;
     encryptCtx = EVP_CIPHER_CTX_new();
+
 
     EVP_CIPHER_CTX *decryptCtx;
     decryptCtx = EVP_CIPHER_CTX_new();
@@ -1049,47 +1140,11 @@ int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
     EVP_DecryptInit_ex(decryptCtx, EVP_aes_128_ctr(), NULL, encKeyStoC -> data, ivStoC -> data);
     // below init is for checking that we are encrypting correctly
     // EVP_DecryptInit_ex(decryptCtx, EVP_aes_128_ctr(), NULL, encKeyCtoS -> data, ivCtoS -> data);
-
-    RawByteArray *ciphertext = aes128EncryptDecrypt(encryptCtx, newKeysPacket, 1);
-
-    printf("ciphertext:\n");
-    for (int i = 0; i < ciphertext -> size; i++) {
-        printf("%02x ", ciphertext -> data[i]);
-    }
-    printf("\n");
-
-    // cat MAC to end of ciphertext and send to server
-    int bufferSize = mac -> size + ciphertext -> size;
-    unsigned char buffer[bufferSize];
-    memcpy(buffer, ciphertext -> data, ciphertext -> size);
-    memcpy(buffer + ciphertext -> size, mac -> data, mac -> size);
-
-    printf("message to send:\n");
-    for (int i = 0; i < sizeof(buffer); i++) {
-        printf("%02x ", buffer[i]);
-    }
-    printf("\n");
-
-    int sentBytes = send(sock, buffer, bufferSize, 0);
-
-    if (sentBytes != -1) {
-        printf("Successful encrypted newkeys packet send! Number of bytes sent: %i\n", sentBytes);
-    } else {
-        printf("Send did not complete successfully.\n");
-    }
-
-    // this output won't make sense until we replace ciphertext with the server's response
-    RawByteArray *plaintext = aes128EncryptDecrypt(decryptCtx, ciphertext, 0);
-
-    printf("plaintext:\n");
-    for (int i = 0; i < plaintext -> size; i++) {
-        printf("%02x ", plaintext -> data[i]);
-    }
-    printf("\n");
+    
+    sendUserAuthReq(sock, encryptCtx, integrityKey,  *seqNum);
+    *seqNum += 1;
 
     // cleanup
-    free(newKeysPacket -> data);
-    free(newKeysPacket);
     free(encKeyCtoS -> data);
     free(encKeyCtoS);
     free(encKeyStoC -> data);
@@ -1100,14 +1155,30 @@ int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
     free(ivStoC);
     free(integrityKey -> data);
     free(integrityKey);
-    free(mac -> data);
-    free(mac);
-    free(ciphertext -> data);
-    free(ciphertext);
-    free(plaintext -> data);
-    free(plaintext);
     EVP_CIPHER_CTX_free(encryptCtx);
     EVP_CIPHER_CTX_free(decryptCtx);
+
+    return 0;
+}
+
+int sendNewKeysPacket(int sock) {
+    RawByteArray *newKeysPacket = generateNewKeysPacket();
+    printf("NEW KEYS PACKET:\n");
+    for (int i = 0; i < newKeysPacket -> size; i++) {
+        printf("%02x", newKeysPacket -> data[i]);
+    }
+    printf("\n");
+
+    int sentBytes = send(sock, newKeysPacket -> data, newKeysPacket -> size, 0);
+    
+    if (sentBytes != -1) {
+        printf("Successful newkeys packet send! Number of bytes sent: %i\n", sentBytes);
+    } else {
+        printf("Send did not complete successfully.\n");
+    }
+
+    free(newKeysPacket -> data);
+    free(newKeysPacket);
 
     return 0;
 }
@@ -1142,7 +1213,11 @@ int startClient(const char *host, const int port) {
     sendDiffieHellmanExchange(sock);
     seqNum += 1;
 
+    sendNewKeysPacket(sock);
+    seqNum += 1;
+
     sendReceiveEncryptedData(sock, &seqNum);
+    // seqNum is incremented implicitly in sendReceiveEncryptedData
 
     return 0;
 }
