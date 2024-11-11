@@ -27,6 +27,7 @@
 #define SSH_MSG_USERAUTH_REQUEST 50
 #define BLOCKSIZE 16 // if encryption isn't working, check blocksize
 #define SHA1_DIGEST_LENGTH 20
+#define MAC_SIZE 20
 
 // defining global variables to construct the message to hash (H) as part of server verification
 // excluding K_S, e, f, & k because we have access to those locally in sendDiffieHellmanExchange()
@@ -1145,6 +1146,43 @@ int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
     // NEXT
     // receive and decrypt server message
     // if time, verify the server's MAC
+    
+    // will want to use realloc later for dynamic buffer size
+    unsigned char *serverResponse = malloc(BUFFER_SIZE);
+    memset(serverResponse, 0, BUFFER_SIZE);  // Clear the buffer    
+    ssize_t bytesReceived = recv(sock, serverResponse, BUFFER_SIZE, 0);
+    if (bytesReceived > 0) {
+        printf("enc server user auth response:\n");
+        for (int i = 0; i < bytesReceived; i++) {
+            printf("%02x ", (unsigned char)serverResponse[i]); 
+        }
+        printf("\n");
+    } else {
+        printf("No server user auth response received :(\n");
+        // random error message code
+        exit(1);
+    }
+
+    RawByteArray *serverResponseAndSize = malloc(sizeof(RawByteArray));
+    serverResponseAndSize -> data = malloc(bytesReceived - MAC_SIZE);
+    serverResponseAndSize -> size = bytesReceived - MAC_SIZE;
+    memcpy(serverResponseAndSize -> data, serverResponse, serverResponseAndSize -> size);
+    
+    unsigned char mac[MAC_SIZE];
+    memcpy(mac, serverResponse + serverResponseAndSize -> size, MAC_SIZE);
+    printf("SERVER MAC:\n");
+    for (int i = 0; i < MAC_SIZE; i++) {
+        printf("%02x ", mac[i]);
+    }
+    printf("\n");
+
+    RawByteArray *decResponse = aes128EncryptDecrypt(decryptCtx, serverResponseAndSize, 0);
+    
+    printf("DEC SERVER AUTH RESPONSE:\n");
+    for (int i = 0; i < decResponse -> size; i++) {
+        printf("%02x ", decResponse -> data[i]);
+    }
+    printf("\n");
 
     // cleanup
     free(encKeyCtoS -> data);
@@ -1159,6 +1197,9 @@ int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
     free(integrityKey);
     EVP_CIPHER_CTX_free(encryptCtx);
     EVP_CIPHER_CTX_free(decryptCtx);
+    free(serverResponse);
+    free(serverResponseAndSize -> data);
+    free(serverResponseAndSize);
 
     return 0;
 }
