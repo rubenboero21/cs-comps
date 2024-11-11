@@ -1078,7 +1078,6 @@ int sendUserAuthReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integrit
 // control function for encryption and MAC messages (post DH messages)
 // NOTES: 
 //   - unsure whether EVP will increment the iv
-//   - encryption/decryption is untested to/from server
 int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
     RawByteArray *encKeyCtoS = deriveKey('C');
     encKeyCtoS -> size = 16;
