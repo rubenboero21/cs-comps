@@ -1060,7 +1060,6 @@ int sendUserAuthReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integrit
     }
     printf("\n");
 
-    // SEEMS LIKE MAC IS GETTING CUT OFF, CAUSING CORRUPTED ERROR ON SERVER, check len
     int sentBytes = send(sock, encMsgBuffer, encMsgBufferSize, 0);
 
     if (sentBytes != -1) {
@@ -1205,7 +1204,7 @@ int startClient(const char *host, const int port) {
     uint32_t seqNum = 0;
 
     sendProtocol(sock);
-    seqNum += 1;
+    // seqNum doesn't seem to be incremented after protocol packet
 
     sendKexInit(sock);
     seqNum += 1;
