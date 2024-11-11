@@ -1142,6 +1142,10 @@ int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
     sendUserAuthReq(sock, encryptCtx, integrityKey,  *seqNum);
     *seqNum += 1;
 
+    // NEXT
+    // receive and decrypt server message
+    // if time, verify the server's MAC
+
     // cleanup
     free(encKeyCtoS -> data);
     free(encKeyCtoS);
