@@ -1,5 +1,6 @@
 Liam and I modified the following files from openSSH version openssh-9.9p1 to aid in 
-our debugging:
+our debugging. The modified sections of the code begin with a comment including "HIJACK", 
+and end with "END" or "END HIJACK".
 
 Files modified
     kexdh.c - called when our client connects to it & we get print out of K
