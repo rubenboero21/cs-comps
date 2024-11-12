@@ -1001,7 +1001,7 @@ int sendUserAuthReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integrit
     userAuthReq -> data = malloc(userAuthReq -> size);
 
     // construct userAuthBuffer
-    unsigned userAuthBuffer[userAuthReq -> size];
+    unsigned char userAuthBuffer[userAuthReq -> size];
     int offset = 0;
     uint32_t size = 0;
     userAuthBuffer[offset] = SSH_MSG_USERAUTH_REQUEST;
@@ -1032,9 +1032,21 @@ int sendUserAuthReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integrit
 
     RawByteArray *userAuthReqPacket = constructPacket(userAuthReq);
 
+    printf("unencrypted send auth:\n");
+    for (int i = 0; i < userAuthReq -> size; i++) {
+        printf("%02x ", userAuthReq -> data[i]);
+    }
+    printf("\n");
+
+    printf("unencrypted send auth packet:\n");
+    for (int i = 0; i < userAuthReqPacket -> size; i++) {
+        printf("%02x ", userAuthReqPacket -> data[i]);
+    }
+    printf("\n");
+
     RawByteArray *ciphertext = aes128EncryptDecrypt(encryptCtx, userAuthReqPacket, 1);
 
-    printf("ciphertext:\n");
+    printf("ciphertext send auth:\n");
     for (int i = 0; i < ciphertext -> size; i++) {
         printf("%02x ", ciphertext -> data[i]);
     }
