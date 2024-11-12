@@ -38,7 +38,7 @@ make clean
 ## Dependencies
 client.c depends on the openSSL library. 
 To install the ossl library, use the package manager of your choice. For example:
-* Using Homebrew on Mac: `brew install openssl@3`
+* Using Homebrew on Mac: `brew install openssl`
 * Using apt on Ubuntu: `sudo apt install openssl`
 
 ## How to run the code
