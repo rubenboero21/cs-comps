@@ -36,15 +36,17 @@ Clean up created files:
 make clean
 ```
 ## Dependencies
-client.c depends on the openSSL library. 
+
+client.c depends on the OpenSSL library. 
 To install the ossl library, use the package manager of your choice. For example:
 * Using Homebrew on Mac: `brew install openssl@3`
 * Using apt on Ubuntu: `sudo apt install openssl`
 
 ## How to run the code
+
 * Use the Makefile (see above). If your specific setup is not handled in the Makefile, you may need to modify the Makefile. Currently supported setups:
   * arm Mac with openssl@3 installed via Homebrew
-  * LIAMS LINUX SETUP
+  * x86_64 Linux with openssl installed via apt
 * Compile and run the code yourself:
   * Compile: gcc `<any additional flags for your ossl install>` -lssl -lcrypto -o `<output file name>` client.c
   * Run: ./`<output file name>` `<hostname>` `<port number>`
