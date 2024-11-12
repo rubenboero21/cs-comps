@@ -38,12 +38,13 @@ make clean
 ## Dependencies
 client.c depends on the openSSL library. 
 To install the ossl library, use the package manager of your choice. For example:
-* Using Homebrew on Mac: `brew install openssl`
+* Using Homebrew on Mac: `brew install openssl@3`
 * Using apt on Ubuntu: `sudo apt install openssl`
 
 ## How to run the code
-* Use the Makefile (see above), modifying the CFLAGS (specifically the -I and -L flags) to match your specific installation of the openSSL library
+* Use the Makefile (see above). If your specific setup is not handled in the Makefile, you may need to modify the Makefile. Currently supported setups:
+  * arm Mac with openssl@3 installed via Homebrew
+  * LIAMS LINUX SETUP
 * Compile and run the code yourself:
   * Compile: gcc `<any additional flags for your ossl install>` -lssl -lcrypto -o `<output file name>` client.c
   * Run: ./`<output file name>` `<hostname>` `<port number>`
-* Note, the CFLAGS is set to work for the default installation of the openSSL library through Homebrew on an arm (M1) Mac
