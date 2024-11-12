@@ -1,7 +1,13 @@
-# CFLAGS = -Wall
-# If we want to use a library to help with DH, need to include it in compile command:
-# this will only work for Ruben's setup, need to change paths to match your installation of openssl
-CFLAGS = -Wall -Wno-deprecated-declarations -I/opt/homebrew/opt/openssl@3/include -L/opt/homebrew/opt/openssl@3/lib -lssl -lcrypto 
+OS := $(shell uname)
+CPU := $(shell uname -p)
+CFLAGS = -Wall -Wno-deprecated-declarations -lssl -lcrypto
+
+# Flags for compilation on MacOS using Arm CPU and OpenSSL installation via Homebrew
+ifeq ($(OS), Darwin)
+	ifeq ($(CPU), arm)
+		CFLAGS += -I/opt/homebrew/opt/openssl@3/include -L/opt/homebrew/opt/openssl@3/lib
+	endif
+endif
 
 # Compile and run the program
 run: a.out
