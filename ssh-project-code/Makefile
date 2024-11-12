@@ -11,16 +11,16 @@ ifeq ($(OS), Darwin)
 endif
 
 # Compile and run the program
-run: a.out
-	./a.out $(ARGS)
+run: client
+	./client $(ARGS)
 
 # Just compile the program
-compile: a.out
+compile: client
 
 # Rule for creating the executable
 a.out: client.c
-	gcc $(CFLAGS) -o a.out client.c
+	gcc $(CFLAGS) -o client client.c
 
 # Clean up the generated files
 clean:
-	rm -f a.out
+	rm -f client
