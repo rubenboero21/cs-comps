@@ -45,5 +45,5 @@ To install the ossl library, use the package manager of your choice. For example
 * Use the Makefile (see above), modifying the CFLAGS (specifically the -I and -L flags) to match your specific installation of the openSSL library
 * Compile and run the code yourself:
   * Compile: gcc `<any additional flags for your ossl install>` -lssl -lcrypto -o `<output file name>` client.c
-  * Run: ./`<output file name>`
+  * Run: ./`<output file name>` `<hostname>` `<port number>`
 * Note, the CFLAGS is set to work for the default installation of the openSSL library through Homebrew on an arm (M1) Mac
