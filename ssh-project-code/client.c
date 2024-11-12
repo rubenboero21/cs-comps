@@ -26,6 +26,7 @@
 #define SSH_MSG_NEWKEYS 21
 #define SSH_MSG_SERVICE_REQUEST 5
 #define SSH_MSG_USERAUTH_REQUEST 50
+#define SSH_MSG_CHANNEL_OPEN 90
 #define BLOCKSIZE 16 // if encryption isn't working, check blocksize
 #define SHA1_DIGEST_LENGTH 20
 #define MAC_SIZE 20
@@ -1006,7 +1007,7 @@ int sendServiceReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integrity
     unsigned char serviceName[12] = "ssh-userauth";
 
     int offset = 0;
-    unsigned char data[1 + sizeof(serviceName)]; // + 1 for 1 byte message code    
+    unsigned char data[1 + sizeof(uint32_t) + sizeof(serviceName)]; // + 1 for 1 byte message code    
     data[0] = SSH_MSG_SERVICE_REQUEST;
     offset += 1;
 
@@ -1063,7 +1064,7 @@ int sendServiceReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integrity
     free(encMsgBuffer -> data);
     free(encMsgBuffer);
 
-    return 0;
+    return 0;   
 }
 
 int sendUserAuthReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integrityKey, uint32_t seqNum) {
@@ -1230,9 +1231,82 @@ int recvMsgVerifyMac(int sock, int bufferSize, RawByteArray *integrityKey, int s
     // cleanup
     free(decResponse -> data);
     free(decResponse);
+    free(computedMac -> data);
+    free(computedMac);
     
     return ret;
 }
+
+
+int sendChannelOpenReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integrityKey, uint32_t seqNum) {
+    RawByteArray *channelOpen = malloc(sizeof(RawByteArray));
+    assert(channelOpen != NULL);
+
+    unsigned char channelType[7] = "session";
+
+    int offset = 0;
+    // + 1 for 1 byte message code, uint32_t x 4 for channel type str length, sender 
+    // channel ID, window size, packet size    
+    unsigned char data[1 + sizeof(uint32_t)*4 + sizeof(channelType)]; 
+    data[0] = SSH_MSG_CHANNEL_OPEN;
+    offset += 1;
+
+    uint32_t size = htonl(sizeof(channelType));
+    memcpy(data + offset, &size, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+    
+    memcpy(data + offset, channelType, sizeof(channelType));
+    offset += sizeof(channelType);
+
+    // sender channel - unique ID for channel chosen by client
+    uint32_t senderChannel = 1;
+    size = htonl(senderChannel);
+    memcpy(data + offset, &size, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+
+    // hard coding window size and max packet size
+    uint32_t initWindowSize = BUFFER_SIZE;
+    size = htonl(initWindowSize);
+    memcpy(data + offset, &size, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+
+    uint32_t maxPacketSize = BUFFER_SIZE;
+    size = htonl(maxPacketSize);
+    memcpy(data + offset, &size, sizeof(uint32_t));
+
+    channelOpen -> data = data;
+    channelOpen -> size = sizeof(data);
+
+    RawByteArray *channelOpenPacket = constructPacket(channelOpen);
+
+    RawByteArray *ciphertext = aes128EncryptDecrypt(encryptCtx, channelOpenPacket, 1);
+
+    RawByteArray *mac = computeHmacSha1(integrityKey, channelOpenPacket, seqNum);
+    
+    RawByteArray *encMsgBuffer = concatenateMacToMsg(mac, ciphertext);
+
+    int sentBytes = send(sock, encMsgBuffer -> data, encMsgBuffer -> size, 0);
+
+    if (sentBytes != -1) {
+        printf("Successful channel open packet send! Number of bytes sent: %i\n", sentBytes);
+    } else {
+        printf("Send did not complete successfully.\n");
+    }
+
+    // cleanup
+    free(channelOpen);
+    free(channelOpenPacket -> data);
+    free(channelOpenPacket);
+    free(ciphertext -> data);
+    free(ciphertext);
+    free(mac -> data);
+    free(mac);
+    free(encMsgBuffer -> data);
+    free(encMsgBuffer);
+
+    return 0;   
+}
+
 
 // control function for encryption and MAC messages (post DH messages)
 int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
@@ -1303,6 +1377,10 @@ int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
     *seqNum += 1;
 
     sendUserAuthReq(sock, encryptCtx, integrityKeyCtoS, *seqNum);
+    recvMsgVerifyMac(sock, BUFFER_SIZE, integrityKeyStoC, *seqNum, decryptCtx);
+    *seqNum += 1;
+
+    sendChannelOpenReq(sock, encryptCtx, integrityKeyCtoS, *seqNum);
     recvMsgVerifyMac(sock, BUFFER_SIZE, integrityKeyStoC, *seqNum, decryptCtx);
     *seqNum += 1;
 
