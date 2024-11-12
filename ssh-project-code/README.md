@@ -36,7 +36,10 @@ Clean up created files:
 make clean
 ```
 ## Dependencies
-This code depends on the openSSL library. 
+client.c depends on the openSSL library. 
+To install the ossl library, use the package manager of your choice. For example:
+* Using Homebrew on Mac: `brew install openssl@3`
+* Using apt on Ubuntu: `sudo apt install openssl`
 
 ## How to run the code
 * Use the Makefile (see above), modifying the CFLAGS to match your specific installation of the openSSL library
