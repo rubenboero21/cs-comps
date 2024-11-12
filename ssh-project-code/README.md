@@ -43,3 +43,4 @@ This code depends on the openSSL library.
 * Compile and run the code yourself:
   * Compile: gcc `<any additional flags for your ossl install>` -lssl -lcrypto -o `<output file name>` client.c
   * Run: ./`<output file name>`
+* Note, the CFLAGS is set to work for the default installation of the openSSL library through Homebrew on an arm (M1) Mac.
