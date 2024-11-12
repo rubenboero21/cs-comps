@@ -41,5 +41,5 @@ This code depends on the openSSL library.
 ## How to run the code
 * Use the Makefile (see above), modifying the CFLAGS to match your specific installation of the openSSL library
 * Compile and run the code yourself:
-  * Compile: gcc <any additional flags for your ossl install> -lssl -lcrypto -o <output file name> client.c
-  * Run: ./<output file name>
+  * Compile: gcc `<any additional flags for your ossl install>` -lssl -lcrypto -o `<output file name>` client.c
+  * Run: ./`<output file name>`
