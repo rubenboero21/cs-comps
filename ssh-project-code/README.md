@@ -2,7 +2,7 @@
 
 ## client.c
 
-Written by Liam and Ruben for Fall CS Comps with Jeff Ondich
+Written by Liam and Ruben for Fall 2024 CS Comps with Jeff Ondich. More information about the project can be found [here](https://cs.carleton.edu/faculty/jondich/courses/comps_f24/assignments/03-topic-ideas.html)
 
 client.c is a simple ssh client that runs on the command line. The usage is:
 
