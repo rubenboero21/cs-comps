@@ -207,5 +207,12 @@ Returns: SOME ERROR CODES - NEED TO UPDATE
 */
 int sendNewKeysPacket(int sock);
 
+// add sendServiceReq function
 
 // add sendUserAuthReq function
+
+//  add concatenateMacToMsg function
+
+//  add recvMsgVerifyMac function
+
+// add sendChannelOpenReq function
