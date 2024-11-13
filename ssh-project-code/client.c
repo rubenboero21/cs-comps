@@ -1000,25 +1000,33 @@ RawByteArray *concatenateMacToMsg(RawByteArray *mac, RawByteArray *ciphertext) {
     return buffer;
 }
 
-int sendServiceReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integrityKey, uint32_t seqNum) {
+// userauth argument is a boolean, 1 means to send userauth req, 0 means to send connection req
+int sendServiceReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integrityKey, uint32_t seqNum, int userauth) {
     RawByteArray *serviceReq = malloc(sizeof(RawByteArray));
     assert(serviceReq != NULL);
 
-    unsigned char serviceName[12] = "ssh-userauth";
+    // userauth is a bool where true (1) indicates to send userauth message
+    // and false (0) indicates to send connection message
+    const char *serviceName;
+    if (userauth) {
+        serviceName = (const char *)"ssh-userauth";
+    } else {
+        serviceName = (const char *)"ssh-connection";
+    }
 
     int offset = 0;
-    unsigned char data[1 + sizeof(uint32_t) + sizeof(serviceName)]; // + 1 for 1 byte message code    
+    unsigned char data[1 + sizeof(uint32_t) + strlen(serviceName)]; // + 1 for 1 byte message code    
     data[0] = SSH_MSG_SERVICE_REQUEST;
     offset += 1;
 
-    uint32_t size = htonl(sizeof(serviceName));
+    uint32_t size = htonl(strlen(serviceName));
     memcpy(data + offset, &size, sizeof(uint32_t));
     offset += sizeof(uint32_t);
     
-    memcpy(data + offset, serviceName, sizeof(serviceName));
+    memcpy(data + offset, serviceName, strlen(serviceName));
     
     serviceReq -> data = data;
-    serviceReq -> size = 1 + sizeof(uint32_t) + sizeof(serviceName);
+    serviceReq -> size = 1 + sizeof(uint32_t) + strlen(serviceName);
 
     // printf("Unencrypted Service Request:\n");
     // for (int i = 0; i < serviceReq -> size; i++) {
@@ -1372,16 +1380,32 @@ int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
     // below init is for checking that we are encrypting correctly
     // EVP_DecryptInit_ex(decryptCtx, EVP_aes_128_ctr(), NULL, encKeyCtoS -> data, ivCtoS -> data);
     
-    sendServiceReq(sock, encryptCtx, integrityKeyCtoS, *seqNum);
-    recvMsgVerifyMac(sock, BUFFER_SIZE, integrityKeyStoC, *seqNum, decryptCtx);
+    sendServiceReq(sock, encryptCtx, integrityKeyCtoS, *seqNum, 1);
+    if (!recvMsgVerifyMac(sock, BUFFER_SIZE, integrityKeyStoC, *seqNum, decryptCtx)) {
+        printf("ERROR: Invalid MAC\n");
+        exit(1);
+    }
     *seqNum += 1;
 
     sendUserAuthReq(sock, encryptCtx, integrityKeyCtoS, *seqNum);
-    recvMsgVerifyMac(sock, BUFFER_SIZE, integrityKeyStoC, *seqNum, decryptCtx);
+    if (!recvMsgVerifyMac(sock, BUFFER_SIZE, integrityKeyStoC, *seqNum, decryptCtx)) {
+        printf("ERROR: Invalid MAC\n");
+        exit(1);
+    }
+    *seqNum += 1;
+
+    sendServiceReq(sock, encryptCtx, integrityKeyCtoS, *seqNum, 0);
+    if (!recvMsgVerifyMac(sock, BUFFER_SIZE, integrityKeyStoC, *seqNum, decryptCtx)) {
+        printf("ERROR: Invalid MAC\n");
+        exit(1);
+    }
     *seqNum += 1;
 
     sendChannelOpenReq(sock, encryptCtx, integrityKeyCtoS, *seqNum);
-    recvMsgVerifyMac(sock, BUFFER_SIZE, integrityKeyStoC, *seqNum, decryptCtx);
+    if (!recvMsgVerifyMac(sock, BUFFER_SIZE, integrityKeyStoC, *seqNum, decryptCtx)) {
+        printf("ERROR: Invalid MAC\n");
+        exit(1);
+    }
     *seqNum += 1;
 
     // cleanup
