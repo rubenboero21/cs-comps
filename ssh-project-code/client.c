@@ -27,6 +27,7 @@
 #define SSH_MSG_SERVICE_REQUEST 5
 #define SSH_MSG_USERAUTH_REQUEST 50
 #define SSH_MSG_CHANNEL_OPEN 90
+#define SSH_MSG_CHANNEL_REQUEST 98
 #define BLOCKSIZE 16 // if encryption isn't working, check blocksize
 #define SHA1_DIGEST_LENGTH 20
 #define MAC_SIZE 20
@@ -1001,32 +1002,25 @@ RawByteArray *concatenateMacToMsg(RawByteArray *mac, RawByteArray *ciphertext) {
 }
 
 // userauth argument is a boolean, 1 means to send userauth req, 0 means to send connection req
-int sendServiceReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integrityKey, uint32_t seqNum, int userauth) {
+int sendServiceReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integrityKey, uint32_t seqNum) {
     RawByteArray *serviceReq = malloc(sizeof(RawByteArray));
     assert(serviceReq != NULL);
 
-    // userauth is a bool where true (1) indicates to send userauth message
-    // and false (0) indicates to send connection message
-    const char *serviceName;
-    if (userauth) {
-        serviceName = (const char *)"ssh-userauth";
-    } else {
-        serviceName = (const char *)"ssh-connection";
-    }
+    unsigned char serviceName[12] = "ssh-userauth";
 
     int offset = 0;
-    unsigned char data[1 + sizeof(uint32_t) + strlen(serviceName)]; // + 1 for 1 byte message code    
+    unsigned char data[1 + sizeof(uint32_t) + sizeof(serviceName)]; // + 1 for 1 byte message code    
     data[0] = SSH_MSG_SERVICE_REQUEST;
     offset += 1;
 
-    uint32_t size = htonl(strlen(serviceName));
+    uint32_t size = htonl(sizeof(serviceName));
     memcpy(data + offset, &size, sizeof(uint32_t));
     offset += sizeof(uint32_t);
     
-    memcpy(data + offset, serviceName, strlen(serviceName));
+    memcpy(data + offset, serviceName, sizeof(serviceName));
     
     serviceReq -> data = data;
-    serviceReq -> size = 1 + sizeof(uint32_t) + strlen(serviceName);
+    serviceReq -> size = 1 + sizeof(uint32_t) + sizeof(serviceName);
 
     // printf("Unencrypted Service Request:\n");
     // for (int i = 0; i < serviceReq -> size; i++) {
@@ -1244,7 +1238,86 @@ int recvMsgVerifyMac(int sock, int bufferSize, RawByteArray *integrityKey, int s
     
     return ret;
 }
+/*
+      byte      SSH_MSG_CHANNEL_REQUEST (98)
+      uint32    recipient channel
+      string    "exec"
+      boolean   want reply
+      string    command
+*/
+int sendChannelReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integrityKey, uint32_t seqNum) {
+       
+    const char exec[4] = "exec";
+    
+    // hard coding the command to run, take in user input once working
+    const char command[6] = "whoami";
+    // we hard coded channel to be 1 in sendChannelOpenReq()
+    uint32_t recipChannel = htonl(1);
+    uint32_t execLen = htonl(sizeof(exec));
+    uint32_t commandLen = htonl(sizeof(command));
+    
+    size_t size = 1 + sizeof(uint32_t) + (sizeof(uint32_t) + sizeof(exec)) + 1 + (sizeof(uint32_t) + sizeof(command));
+    
+    int offset = 0;
+    unsigned char data[size];
+    
+    data[0] = SSH_MSG_CHANNEL_REQUEST;
+    offset += 1;
+    
+    memcpy(data + offset, &recipChannel, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
 
+    memcpy(data + offset, &execLen, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+
+    memcpy(data + offset, exec, sizeof(exec));
+    offset += sizeof(exec);
+
+    // want reply = true (1)
+    data[offset] = 1;
+    offset += 1;
+
+    memcpy(data + offset, &commandLen, sizeof(uint32_t));
+    offset += sizeof(uint32_t);
+
+    memcpy(data + offset, command, sizeof(command));
+
+    printf("CHANNEL REQ EXEC:\n");
+    for (int i = 0; i < sizeof(data); i++) {
+        printf("%02x ", data[i]);
+    }
+    printf("\n");
+
+    RawByteArray channelReq = {data, size};
+
+    RawByteArray *channelReqPacket = constructPacket(&channelReq);
+
+    RawByteArray *ciphertext = aes128EncryptDecrypt(encryptCtx, channelReqPacket, 1);
+
+    RawByteArray *mac = computeHmacSha1(integrityKey, channelReqPacket, seqNum);
+    
+    RawByteArray *encMsgBuffer = concatenateMacToMsg(mac, ciphertext);
+
+    int sentBytes = send(sock, encMsgBuffer -> data, encMsgBuffer -> size, 0);
+
+    if (sentBytes != -1) {
+        printf("Successful channel open packet send! Number of bytes sent: %i\n", sentBytes);
+    } else {
+        printf("Send did not complete successfully.\n");
+    }
+
+    // cleanup
+    free(channelReqPacket -> data);
+    free(channelReqPacket);
+    free(ciphertext -> data);
+    free(ciphertext);
+    free(mac -> data);
+    free(mac);
+    free(encMsgBuffer -> data);
+    free(encMsgBuffer);
+
+    return 0;
+}
 
 int sendChannelOpenReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integrityKey, uint32_t seqNum) {
     RawByteArray *channelOpen = malloc(sizeof(RawByteArray));
@@ -1380,7 +1453,7 @@ int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
     // below init is for checking that we are encrypting correctly
     // EVP_DecryptInit_ex(decryptCtx, EVP_aes_128_ctr(), NULL, encKeyCtoS -> data, ivCtoS -> data);
     
-    sendServiceReq(sock, encryptCtx, integrityKeyCtoS, *seqNum, 1);
+    sendServiceReq(sock, encryptCtx, integrityKeyCtoS, *seqNum);
     if (!recvMsgVerifyMac(sock, BUFFER_SIZE, integrityKeyStoC, *seqNum, decryptCtx)) {
         printf("ERROR: Invalid MAC\n");
         exit(1);
@@ -1394,14 +1467,15 @@ int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
     }
     *seqNum += 1;
 
-    sendServiceReq(sock, encryptCtx, integrityKeyCtoS, *seqNum, 0);
+    // things go bad here - corrupted error on server
+    sendChannelOpenReq(sock, encryptCtx, integrityKeyCtoS, *seqNum);
     if (!recvMsgVerifyMac(sock, BUFFER_SIZE, integrityKeyStoC, *seqNum, decryptCtx)) {
         printf("ERROR: Invalid MAC\n");
         exit(1);
     }
     *seqNum += 1;
 
-    sendChannelOpenReq(sock, encryptCtx, integrityKeyCtoS, *seqNum);
+    // sendChannelReq(sock, encryptCtx, integrityKeyCtoS, *seqNum);
     if (!recvMsgVerifyMac(sock, BUFFER_SIZE, integrityKeyStoC, *seqNum, decryptCtx)) {
         printf("ERROR: Invalid MAC\n");
         exit(1);
