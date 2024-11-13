@@ -210,6 +210,7 @@ int sendNewKeysPacket(int sock);
 // add sendServiceReq function
 
 // add sendUserAuthReq function
+// userauth argument is a boolean, 1 means to send userauth req, 0 means to send connection req
 
 //  add concatenateMacToMsg function
 
