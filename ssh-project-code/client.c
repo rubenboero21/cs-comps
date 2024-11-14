@@ -60,6 +60,11 @@ RawByteArray *constructPacket(RawByteArray *payload) {
     // + 5 bytes: 4 for packet length, 1 for padding length
     unsigned char paddingLength = BLOCKSIZE - ((payloadLength + 5) % BLOCKSIZE);
 
+    // ensure minimum 4 bytes of padding
+    if (paddingLength < 4) {
+        paddingLength += BLOCKSIZE;
+    }
+
     // + 1 for padding length byte: payload size: actual padding bytes
     uint32_t packetLength = htonl(1 + payloadLength + paddingLength);
 
@@ -1251,8 +1256,8 @@ int sendChannelReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integrity
     
     // hard coding the command to run, take in user input once working
     const char command[6] = "whoami";
-    // we hard coded channel to be 1 in sendChannelOpenReq()
-    uint32_t recipChannel = htonl(1);
+    // we hard coded channel to be 0 in sendChannelOpenReq()
+    uint32_t recipChannel = htonl(0);
     uint32_t execLen = htonl(sizeof(exec));
     uint32_t commandLen = htonl(sizeof(command));
     
@@ -1340,7 +1345,7 @@ int sendChannelOpenReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integ
     offset += sizeof(channelType);
 
     // sender channel - unique ID for channel chosen by client
-    uint32_t senderChannel = 1;
+    uint32_t senderChannel = 0;
     size = htonl(senderChannel);
     memcpy(data + offset, &size, sizeof(uint32_t));
     offset += sizeof(uint32_t);
@@ -1467,19 +1472,34 @@ int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
     }
     *seqNum += 1;
 
-    // things go bad here - corrupted error on server
     sendChannelOpenReq(sock, encryptCtx, integrityKeyCtoS, *seqNum);
+    // eating the global server response
     if (!recvMsgVerifyMac(sock, BUFFER_SIZE, integrityKeyStoC, *seqNum, decryptCtx)) {
+        printf("ERROR: Invalid MAC\n");
+        exit(1);
+    }
+
+    // read server's SSH_MSG_CHANNEL_OPEN_CONFIRMATION message
+    // server sends 2 messages back to back, so need to add 1 to seqNum
+    if (!recvMsgVerifyMac(sock, BUFFER_SIZE, integrityKeyStoC, *seqNum + 1, decryptCtx)) {
         printf("ERROR: Invalid MAC\n");
         exit(1);
     }
     *seqNum += 1;
 
-    // sendChannelReq(sock, encryptCtx, integrityKeyCtoS, *seqNum);
-    if (!recvMsgVerifyMac(sock, BUFFER_SIZE, integrityKeyStoC, *seqNum, decryptCtx)) {
+    // send "whoami" command to the server
+    sendChannelReq(sock, encryptCtx, integrityKeyCtoS, *seqNum);
+    if (!recvMsgVerifyMac(sock, BUFFER_SIZE, integrityKeyStoC, *seqNum + 1, decryptCtx)) {
+        printf("ERROR: Invalid MAC\n");
+        // exit(1);
+    }
+
+    // read server's command response
+    if (!recvMsgVerifyMac(sock, BUFFER_SIZE, integrityKeyStoC, *seqNum + 2, decryptCtx)) {
         printf("ERROR: Invalid MAC\n");
         exit(1);
     }
+
     *seqNum += 1;
 
     // cleanup
