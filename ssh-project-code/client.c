@@ -1500,7 +1500,7 @@ int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
         exit(1);
     }
 
-    *seqNum += 1;
+    // *seqNum += 1;
 
     // cleanup
     free(encKeyCtoS -> data);
