@@ -1223,6 +1223,12 @@ int recvMsgVerifyMac(int sock, int bufferSize, RawByteArray *integrityKey, int s
     }
     printf("\n");
 
+    printf("INTEGRITY KEY\n");
+    for (int i = 0; i < integrityKey -> size; i++) {
+        printf("%02x ", integrityKey -> data[i]);
+    }
+    printf("\n");
+
     RawByteArray *computedMac = computeHmacSha1(integrityKey, decResponse, seqNum);
 
     int ret = 0;
@@ -1243,6 +1249,7 @@ int recvMsgVerifyMac(int sock, int bufferSize, RawByteArray *integrityKey, int s
     
     return ret;
 }
+
 /*
       byte      SSH_MSG_CHANNEL_REQUEST (98)
       uint32    recipient channel
@@ -1497,10 +1504,24 @@ int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
     // read server's command response
     if (!recvMsgVerifyMac(sock, BUFFER_SIZE, integrityKeyStoC, *seqNum + 2, decryptCtx)) {
         printf("ERROR: Invalid MAC\n");
-        exit(1);
+        // exit(1);
     }
+    *seqNum += 1;
 
+    // adding the 2 receives below make the server output something that 
+    // looks like the child process is finishing, but it adds a read error
+
+    // if (!recvMsgVerifyMac(sock, BUFFER_SIZE, integrityKeyStoC, *seqNum + 2, decryptCtx)) {
+    //     printf("ERROR: Invalid MAC\n");
+    //     // exit(1);
+    // }
     // *seqNum += 1;
+    // if (!recvMsgVerifyMac(sock, BUFFER_SIZE, integrityKeyStoC, *seqNum + 2, decryptCtx)) {
+    //     printf("ERROR: Invalid MAC\n");
+    //     // exit(1);
+    // }
+    // *seqNum += 1;
+
 
     // cleanup
     free(encKeyCtoS -> data);
