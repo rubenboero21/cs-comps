@@ -1400,6 +1400,7 @@ int sendChannelOpenReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integ
     return 0;   
 }
 
+// function to read the 2 messages that are part of 1 packet
 int recvWinAdjChanSuccVerifyMac(int sock, int bufferSize, RawByteArray *integrityKey, int seqNum, EVP_CIPHER_CTX *decryptCtx) {
     unsigned char serverResponse[bufferSize];
     memset(serverResponse, 0, bufferSize); 
@@ -1499,6 +1500,62 @@ int recvWinAdjChanSuccVerifyMac(int sock, int bufferSize, RawByteArray *integrit
     return winAdjRet && chanSuccRet;
 }
 
+// there may be other messages that are sent in this packet, may need to 
+// modify the function name and body to accomodate
+int recvChanDataVerifyMac(int sock, int bufferSize, RawByteArray *integrityKey, int seqNum, EVP_CIPHER_CTX *decryptCtx) {
+    unsigned char serverResponse[bufferSize];
+    memset(serverResponse, 0, bufferSize); 
+
+    ssize_t bytesReceived = recv(sock, serverResponse, bufferSize, 0);
+
+    if (bytesReceived > 0) {
+        printf("Encrypted Channel Data Message (length=%zd):\n", bytesReceived);
+        for (int i = 0; i < bytesReceived; i++) {
+            printf("%02x ", (unsigned char)serverResponse[i]); 
+        }
+        printf("\n");
+    } else {
+        printf("No server response received :(\n");
+        // random error message code
+        exit(1);
+    }
+
+    unsigned char chanData[32]; // hard coded for now
+    unsigned char chanDataMac[MAC_SIZE];
+
+    memcpy(chanData, serverResponse, sizeof(chanData));
+    memcpy(chanDataMac, serverResponse + sizeof(chanData), MAC_SIZE);
+
+    RawByteArray chanDataAndSize = {chanData, sizeof(chanData)};
+
+    RawByteArray *chanDataDec = aes128EncryptDecrypt(decryptCtx, &chanDataAndSize, 0);
+    
+    printf("DEC CHANNEL DATA SERVER RESPONSE:\n");
+    for (int i = 0; i < chanDataDec -> size; i++) {
+        printf("%c ", chanDataDec -> data[i]);
+    }
+    printf("\n");
+
+    RawByteArray *computedChanDataMac = computeHmacSha1(integrityKey, chanDataDec, seqNum);
+    
+    int chanDataRet = 0;
+    // ensure that their mac matches what we expect when we compute it 
+    if (strncmp((const char *)computedChanDataMac -> data, (const char *)chanDataMac, MAC_SIZE) != 0) {
+        printf("Channel Data Server MAC invalid\n");
+        chanDataRet = 0;
+    } else {
+        printf("Channel Data Server MAC valid\n");
+        chanDataRet = 1;
+    }
+
+    // cleanup
+    free(computedChanDataMac -> data);
+    free(computedChanDataMac);
+    free(chanDataDec -> data);
+    free(chanDataDec);
+
+    return chanDataRet;
+}
 
 // control function for encryption and MAC messages (post DH messages)
 int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
@@ -1602,8 +1659,8 @@ int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
     }
     *seqNum += 1;
 
-    // read channel data ... probably
-    if (!recvMsgVerifyMac(sock, BUFFER_SIZE, integrityKeyStoC, *seqNum + 2, decryptCtx)) {
+    // read channel data
+    if (!recvChanDataVerifyMac(sock, BUFFER_SIZE, integrityKeyStoC, *seqNum + 2, decryptCtx)) {
         printf("ERROR: Invalid MAC\n");
         // exit(1);
     }
