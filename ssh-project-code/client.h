@@ -218,3 +218,7 @@ int sendNewKeysPacket(int sock);
 // add sendChannelOpenReq function
 
 // add sendChannelReq() function
+
+// add recvWinAdjChanSuccVerifyMac function
+
+// add recvChanDataVerifyMac function (may have changed names)
