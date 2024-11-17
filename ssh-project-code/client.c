@@ -1400,6 +1400,105 @@ int sendChannelOpenReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integ
     return 0;   
 }
 
+int recvWinAdjChanSuccVerifyMac(int sock, int bufferSize, RawByteArray *integrityKey, int seqNum, EVP_CIPHER_CTX *decryptCtx) {
+    unsigned char serverResponse[bufferSize];
+    memset(serverResponse, 0, bufferSize); 
+
+    ssize_t bytesReceived = recv(sock, serverResponse, bufferSize, 0);
+
+    if (bytesReceived > 0) {
+        printf("Encrypted Window Adjust and Channel Success Message (length=%zd):\n", bytesReceived);
+        for (int i = 0; i < bytesReceived; i++) {
+            printf("%02x ", (unsigned char)serverResponse[i]); 
+        }
+        printf("\n");
+    } else {
+        printf("No server response received :(\n");
+        // random error message code
+        exit(1);
+    }
+
+    unsigned char winAdj[32]; // hard coded for now
+    unsigned char winAdjMac[MAC_SIZE];
+
+    memcpy(winAdj, serverResponse, sizeof(winAdj));
+    memcpy(winAdjMac, serverResponse + sizeof(winAdj), MAC_SIZE);
+
+    RawByteArray winAdjAndSize = {winAdj, sizeof(winAdj)};
+
+    RawByteArray *winAdjDec = aes128EncryptDecrypt(decryptCtx, &winAdjAndSize, 0);
+    
+    printf("DEC WIN-ADJ SERVER RESPONSE:\n");
+    for (int i = 0; i < winAdjDec -> size; i++) {
+        printf("%02x ", winAdjDec -> data[i]);
+    }
+    printf("\n");
+
+    RawByteArray *computedWinAdjMac = computeHmacSha1(integrityKey, winAdjDec, seqNum);
+    
+    int winAdjRet = 0;
+    // ensure that their mac matches what we expect when we compute it 
+    if (strncmp((const char *)computedWinAdjMac -> data, (const char *)winAdjMac, MAC_SIZE) != 0) {
+        printf("WinAdj Server MAC invalid\n");
+        winAdjRet = 0;
+    } else {
+        printf("WinAdj Server MAC valid\n");
+        winAdjRet = 1;
+    }
+
+    unsigned char chanSucc[16];
+    unsigned char chanSuccMac[MAC_SIZE];
+
+    memcpy(chanSucc, serverResponse + sizeof(winAdj) + MAC_SIZE, sizeof(chanSucc));
+    memcpy(chanSuccMac, serverResponse + sizeof(winAdj) + MAC_SIZE + sizeof(chanSucc), MAC_SIZE);
+
+    RawByteArray chanSuccAndSize = {chanSucc, sizeof(chanSucc)};
+
+    RawByteArray *chanSuccDec = aes128EncryptDecrypt(decryptCtx, &chanSuccAndSize, 0);
+    
+    printf("DEC CHAN-SUCCESS SERVER RESPONSE:\n");
+    for (int i = 0; i < chanSuccDec -> size; i++) {
+        printf("%02x ", chanSuccDec -> data[i]);
+    }
+    printf("\n");
+
+    // SEQ NUM NEEDS TO BE 1 HIGHER
+    RawByteArray *computedChanSuccMac = computeHmacSha1(integrityKey, chanSuccDec, seqNum + 1);
+
+    printf("computed chan succ mac:\n");
+    for (int i = 0; i < computedChanSuccMac -> size; i++) {
+        printf("%02x ", computedChanSuccMac -> data[i]);
+    }
+    printf("\nreceived chan succ mac:\n");
+    for (int i = 0; i < sizeof(chanSuccMac); i++) {
+        printf("%02x ", chanSuccMac[i]);
+    }
+    printf("\n");
+    
+    int chanSuccRet = 0;
+    // ensure that their mac matches what we expect when we compute it 
+    if (strncmp((const char *)computedChanSuccMac -> data, (const char *)chanSuccMac, MAC_SIZE) != 0) {
+        printf("ChanSucc Server MAC invalid\n");
+        chanSuccRet = 0;
+    } else {
+        printf("ChanSucc Server MAC valid\n");
+        chanSuccRet = 1;
+    }
+    
+    // cleanup
+    free(winAdjDec -> data);
+    free(winAdjDec);
+    free(computedWinAdjMac -> data);
+    free(computedWinAdjMac);
+
+    free(chanSuccDec -> data);
+    free(chanSuccDec);
+    free(computedChanSuccMac -> data);
+    free(computedChanSuccMac);
+
+    return winAdjRet && chanSuccRet;
+}
+
 
 // control function for encryption and MAC messages (post DH messages)
 int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
@@ -1496,31 +1595,19 @@ int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
 
     // send "whoami" command to the server
     sendChannelReq(sock, encryptCtx, integrityKeyCtoS, *seqNum);
-    if (!recvMsgVerifyMac(sock, BUFFER_SIZE, integrityKeyStoC, *seqNum + 1, decryptCtx)) {
-        printf("ERROR: Invalid MAC\n");
-        // exit(1);
+    // recv window adj and channel sucess
+    if (!recvWinAdjChanSuccVerifyMac(sock, BUFFER_SIZE, integrityKeyStoC, *seqNum + 1, decryptCtx)) {
+        printf("ERROR: Either Invalid WinAdj or ChannSucc MAC\n");
+        exit(1);
     }
+    *seqNum += 1;
 
-    // read server's command response
+    // read channel data ... probably
     if (!recvMsgVerifyMac(sock, BUFFER_SIZE, integrityKeyStoC, *seqNum + 2, decryptCtx)) {
         printf("ERROR: Invalid MAC\n");
         // exit(1);
     }
     *seqNum += 1;
-
-    // adding the 2 receives below make the server output something that 
-    // looks like the child process is finishing, but it adds a read error
-
-    // if (!recvMsgVerifyMac(sock, BUFFER_SIZE, integrityKeyStoC, *seqNum + 2, decryptCtx)) {
-    //     printf("ERROR: Invalid MAC\n");
-    //     // exit(1);
-    // }
-    // *seqNum += 1;
-    // if (!recvMsgVerifyMac(sock, BUFFER_SIZE, integrityKeyStoC, *seqNum + 2, decryptCtx)) {
-    //     printf("ERROR: Invalid MAC\n");
-    //     // exit(1);
-    // }
-    // *seqNum += 1;
 
 
     // cleanup
