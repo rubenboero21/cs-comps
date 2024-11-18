@@ -1520,23 +1520,49 @@ int recvChanDataVerifyMac(int sock, int bufferSize, RawByteArray *integrityKey, 
         exit(1);
     }
 
-    unsigned char chanData[32]; // hard coded for now
+    RawByteArray packetAndSize = {serverResponse, sizeof(serverResponse)};
+
+    RawByteArray *fullPacketDec = aes128EncryptDecrypt(decryptCtx, &packetAndSize, 0);
+
+    // read the length of the 1st message
+    int offset = 0;
+    uint32_t messageLen = (fullPacketDec -> data[offset] << 24) | (fullPacketDec -> data[offset + 1] << 16) | (fullPacketDec -> data[offset + 2] << 8) | fullPacketDec -> data[offset + 3];
+    offset += sizeof(uint32_t);
+    printf("message len: %d\n", messageLen);
+    // we can check if there are multiple message in 1 packet by comparing the number
+    // of bytes read to the message len
+    fullPacketDec -> size = messageLen + sizeof(uint32_t);
+
+    // read the length of the data string
+    offset += 1; // skip padding len byte
+    
+    unsigned char messageCode = fullPacketDec -> data[offset];
+    offset += 1;
+    printf("message code: %i\n", messageCode);
+
+    // skip the recipient channel number
+    offset += sizeof(uint32_t);
+
+    uint32_t dataLen = (fullPacketDec -> data[offset] << 24) | (fullPacketDec -> data[offset + 1] << 16) | (fullPacketDec -> data[offset + 2] << 8) | fullPacketDec -> data[offset + 3];
+    offset += sizeof(uint32_t);
+    printf("data len: %d\n", dataLen);
+    
+    // read the contents of the string and the MAC
+    unsigned char chanData[dataLen];
     unsigned char chanDataMac[MAC_SIZE];
 
-    memcpy(chanData, serverResponse, sizeof(chanData));
-    memcpy(chanDataMac, serverResponse + sizeof(chanData), MAC_SIZE);
+    memcpy(chanData, fullPacketDec -> data + offset, sizeof(chanData));
+    memcpy(chanDataMac, serverResponse + (messageLen + sizeof(uint32_t)), MAC_SIZE);
 
     RawByteArray chanDataAndSize = {chanData, sizeof(chanData)};
-
-    RawByteArray *chanDataDec = aes128EncryptDecrypt(decryptCtx, &chanDataAndSize, 0);
     
     printf("DEC CHANNEL DATA SERVER RESPONSE:\n");
-    for (int i = 0; i < chanDataDec -> size; i++) {
-        printf("%c ", chanDataDec -> data[i]);
+    for (int i = 0; i < chanDataAndSize.size; i++) {
+        printf("%c", chanDataAndSize.data[i]);
     }
     printf("\n");
 
-    RawByteArray *computedChanDataMac = computeHmacSha1(integrityKey, chanDataDec, seqNum);
+    RawByteArray *computedChanDataMac = computeHmacSha1(integrityKey, fullPacketDec, seqNum);
     
     int chanDataRet = 0;
     // ensure that their mac matches what we expect when we compute it 
@@ -1551,8 +1577,8 @@ int recvChanDataVerifyMac(int sock, int bufferSize, RawByteArray *integrityKey, 
     // cleanup
     free(computedChanDataMac -> data);
     free(computedChanDataMac);
-    free(chanDataDec -> data);
-    free(chanDataDec);
+    free(fullPacketDec -> data);
+    free(fullPacketDec);
 
     return chanDataRet;
 }
