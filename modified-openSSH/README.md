@@ -1,4 +1,4 @@
-We (Liam and Ruben) modified the following files from OpenSSH version openssh-9.9p1 to aid in our debugging. We got the code from the [OpenSSH GitHub](https://github.com/openssh/openssh-portable). The modified sections of the code begin with a comment including "HIJACK", and end with a comment including "END". 
+We (Liam and Ruben) modified the following files from OpenSSH version **openssh-9.9p1** to aid in our debugging. We got the code from the [OpenSSH GitHub](https://github.com/openssh/openssh-portable). The modified sections of the code begin with a comment including "HIJACK", and end with a comment including "END". 
 
 **Files modified:**
 - kexdh.c 
