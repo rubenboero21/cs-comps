@@ -1,0 +1,14 @@
+Resources:
+https://datatracker.ietf.org/doc/html/rfc2104
+https://datatracker.ietf.org/doc/html/rfc4250
+https://www.rfc-editor.org/rfc/rfc4250
+https://datatracker.ietf.org/doc/html/rfc4251
+https://datatracker.ietf.org/doc/html/rfc4252
+https://www.rfc-editor.org/rfc/rfc4252
+https://datatracker.ietf.org/doc/html/rfc4253
+https://datatracker.ietf.org/doc/html/rfc4254
+https://datatracker.ietf.org/doc/html/rfc4344
+https://www.cs.cmu.edu/afs/cs/academic/class/15213-f99/www/class26/tcpclient.c
+https://docs.openssl.org/master/
+https://github.com/openssh
+https://github.com/lawsus/secure-shell/blob/main/client.c
