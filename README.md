@@ -1,5 +1,5 @@
 # cs-comps
-Ruben Boero and Liam Keane's repo for Jeff's security comps Fall 2024. 
+Ruben Boero and Liam Keane's repo for [Jeff's security comps Fall 2024](https://docs.google.com/document/d/e/2PACX-1vSouRo8KV3OQYULsrzRG4ekcRslUbjvLqcGHJjQ8peiBg_xVDK24utqCMxEoJRkYdpKWsjdgJuT5ZX9/pub). 
 
 Project code and code documentation can be found in the [ssh-project-code](https://github.com/rubenboero21/cs-comps/tree/main/ssh-project-code) folder.
 
