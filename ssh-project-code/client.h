@@ -207,18 +207,81 @@ Returns: SOME ERROR CODES - NEED TO UPDATE
 */
 int sendNewKeysPacket(int sock);
 
-// add sendServiceReq function
+/*
+Input sock: the socket to send the protocol packet to
+Input encryptCtx: pointer to an OpenSSL encryption context (used to encrypt plaintext)
+Input integrityKey: the integrity key, used to compute MAC
+Input seqNum: the sequence number, used in computing MAC
+Returns: SOME ERROR CODES - NEED TO UPDATE
+*/
+int sendServiceReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integrityKey, uint32_t seqNum);
 
-// add sendUserAuthReq function
+/*
+Input sock: the socket to send the protocol packet to
+Input encryptCtx: pointer to an OpenSSL encryption context (used to encrypt plaintext)
+Input integrityKey: the integrity key, used to compute MAC
+Input seqNum: the sequence number, used in computing MAC
+Returns: SOME ERROR CODES - NEED TO UPDATE
+*/
+int sendUserAuthReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integrityKey, uint32_t seqNum);
 
-//  add concatenateMacToMsg function
+/*
+Input mac: the computed MAC
+Input ciphertext: the ciphertext to append the MAC to
+Returns: pointer to a RawByteArray struct that contains the ciphertext and MAC
+*/
+RawByteArray *concatenateMacToMsg(RawByteArray *mac, RawByteArray *ciphertext);
 
-//  add recvMsgVerifyMac function
+/*
+Input sock: the socket to send the protocol packet to
+Input bufferSize: the size of the buffer in which to write the server's response
+Input integrityKey: the integrity key, used to compute MAC
+Input seqNum: the sequence number, used in computing MAC
+Input decryptCtx: pointer to an OpenSSL decryption context (used to decrypt ciphertext)
+Returns: 1 if MAC is valid, 0 if MAC is not valid
+*/
+int recvMsgVerifyMac(int sock, int bufferSize, RawByteArray *integrityKey, int seqNum, EVP_CIPHER_CTX *decryptCtx);
 
-// add sendChannelOpenReq function
+/*
+Input sock: the socket to send the protocol packet to
+Input encryptCtx: pointer to an OpenSSL encryption context (used to encrypt plaintext)
+Input integrityKey: the integrity key, used to compute MAC
+Input seqNum: the sequence number, used in computing MAC
+Returns: SOME ERROR CODES - NEED TO UPDATE
+*/
+int sendChannelOpenReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integrityKey, uint32_t seqNum);
 
-// add sendChannelReq() function
+/*
+Input sock: the socket to send the protocol packet to
+Input encryptCtx: pointer to an OpenSSL encryption context (used to encrypt plaintext)
+Input integrityKey: the integrity key, used to compute MAC
+Input seqNum: the sequence number, used in computing MAC
+Returns: SOME ERROR CODES - NEED TO UPDATE
+*/
+int sendChannelReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integrityKey, uint32_t seqNum);
 
-// add recvWinAdjChanSuccVerifyMac function
+/*
+Input sock: the socket to send the protocol packet to
+Input bufferSize: the size of the buffer in which to write the server's response
+Input integrityKey: the integrity key, used to compute MAC
+Input seqNum: the sequence number, used in computing MAC
+Input decryptCtx: pointer to an OpenSSL decryption context (used to decrypt ciphertext)
+Returns: SOME ERROR CODES - NEED TO UPDATE
+This function is hard coded to receive only the window adjust and channel success message
+and verify the corresponding MACs. This function will be obselete once we implement
+a dynamic solution to reading server responses
+*/
+int recvWinAdjChanSuccVerifyMac(int sock, int bufferSize, RawByteArray *integrityKey, int seqNum, EVP_CIPHER_CTX *decryptCtx);
 
-// add recvChanDataVerifyMac function (may have changed names)
+/*
+Input sock: the socket to send the protocol packet to
+Input bufferSize: the size of the buffer in which to write the server's response
+Input integrityKey: the integrity key, used to compute MAC
+Input seqNum: the sequence number, used in computing MAC
+Input decryptCtx: pointer to an OpenSSL decryption context (used to decrypt ciphertext)
+Returns: SOME ERROR CODES - NEED TO UPDATE
+This function dynamically reads the server response, but only for the channel data 
+message. This function will also be obselete once we implement a dynamic solution to
+reading server responses
+*/
+int recvChanDataVerifyMac(int sock, int bufferSize, RawByteArray *integrityKey, int seqNum, EVP_CIPHER_CTX *decryptCtx);
