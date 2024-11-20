@@ -264,6 +264,8 @@ RawByteArray* addTwosComplementBit(const unsigned char* pubKey, int pubKeyLen) {
 }
 
 // Function to compute the SHA-256 hash of a message and return it as a pointer to RawByteArray
+// this function actually has error checking, that's because we got stuck here, so we
+// spent the time to add it to help with debugging
 RawByteArray *computeSHA256Hash(const RawByteArray *message) {
     EVP_MD_CTX *mdctx = EVP_MD_CTX_new(); 
     const EVP_MD *md = EVP_sha256(); 
@@ -319,6 +321,8 @@ RawByteArray *computeSHA256Hash(const RawByteArray *message) {
     return outputHash; 
 }
 
+// this function actually has error checking, that's because we got stuck here, 
+// so we spent the time to add it to help with debugging
 int verifyServerSignature(ServerDHResponse *dhResponse, RawByteArray *message) {
     EVP_PKEY *serverPublicKey = NULL;
     EVP_MD_CTX *mdctx = NULL;
@@ -331,7 +335,7 @@ int verifyServerSignature(ServerDHResponse *dhResponse, RawByteArray *message) {
         goto cleanup;
     }
 
-    // check for Ed25519 key type
+    // check for ed25519 key type
     int keyType = EVP_PKEY_base_id(serverPublicKey);
     if (keyType != EVP_PKEY_ED25519) {
         printf("Error: serverPublicKey is not of type Ed25519\n");
@@ -345,7 +349,7 @@ int verifyServerSignature(ServerDHResponse *dhResponse, RawByteArray *message) {
         goto cleanup;
     }
 
-    // initialize the verification operation for Ed25519
+    // initialize the verification operation for ed25519
     if (EVP_DigestVerifyInit(mdctx, NULL, NULL, NULL, serverPublicKey) != 1) {
         printf("Error: Could not initialize digest verify operation\n");
         goto cleanup;
