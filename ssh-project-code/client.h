@@ -279,7 +279,7 @@ Input bufferSize: the size of the buffer in which to write the server's response
 Input integrityKey: the integrity key, used to compute MAC
 Input seqNum: the sequence number, used in computing MAC
 Input decryptCtx: pointer to an OpenSSL decryption context (used to decrypt ciphertext)
-Returns: SOME ERROR CODES - NEED TO UPDATE
+Returns: 1 if both MACs are valid, 0 otherwise
 This function dynamically reads the server response, but only for the channel data 
 message. This function will also be obselete once we implement a dynamic solution to
 reading server responses
