@@ -50,7 +50,6 @@ size_t hashGlobalLen;
 // remember to free the struct AND data
 RawByteArray *constructPacket(RawByteArray *payload) {
     
-    // Calculate padding length, calculate packet length, generate random padding, calculate TOTAL packet size
     size_t payloadLength = payload->size;
     
     // + 5 bytes: 4 for packet length, 1 for padding length
@@ -75,7 +74,7 @@ RawByteArray *constructPacket(RawByteArray *payload) {
     binaryPacket -> data = malloc(totalSize);
     assert(binaryPacket -> data != NULL);
 
-    // Copy contents into our packet (binaryPacket)
+    // copy contents into our packet (binaryPacket)
     memcpy(binaryPacket -> data, &packetLength, 4); // length of packet
     memcpy(binaryPacket -> data + 4, &paddingLength, 1); // padding length
     memcpy(binaryPacket -> data + 5, payload -> data, payload -> size); // payload
@@ -246,11 +245,11 @@ void printServerDHResponse(unsigned char* payload) {
 // Adds the leading 2s complement byte if necessary to ensure that e is positive
 // remember to free returned rawbytearray data, and then rawbytearray itself
 RawByteArray* addTwosComplementBit(const unsigned char* pubKey, int pubKeyLen) {
-    int needs_padding = (pubKey[0] & 0x80) != 0;
-    int mpint_len = pubKeyLen + (needs_padding ? 1 : 0);
+    int needsPadding = (pubKey[0] & 0x80) != 0;
+    int mpintLen = pubKeyLen + (needsPadding ? 1 : 0);
     
-    unsigned char* mpint = malloc(mpint_len);
-    if (needs_padding) {
+    unsigned char* mpint = malloc(mpintLen);
+    if (needsPadding) {
         mpint[0] = 0x00;
         memcpy(mpint + 1, pubKey, pubKeyLen);
     } else {
@@ -259,26 +258,26 @@ RawByteArray* addTwosComplementBit(const unsigned char* pubKey, int pubKeyLen) {
     
     RawByteArray* mpintAndSize = malloc(sizeof(RawByteArray));
     mpintAndSize -> data = mpint;
-    mpintAndSize -> size = mpint_len;
+    mpintAndSize -> size = mpintLen;
 
     return mpintAndSize;
 }
 
 // Function to compute the SHA-256 hash of a message and return it as a pointer to RawByteArray
 RawByteArray *computeSHA256Hash(const RawByteArray *message) {
-    EVP_MD_CTX *mdctx = EVP_MD_CTX_new();  // Create a message digest context
-    const EVP_MD *md = EVP_sha256();       // Specify the SHA-256 algorithm
-    RawByteArray *outputHash = malloc(sizeof(RawByteArray));   // Allocate memory for output struct
+    EVP_MD_CTX *mdctx = EVP_MD_CTX_new(); 
+    const EVP_MD *md = EVP_sha256(); 
+    RawByteArray *outputHash = malloc(sizeof(RawByteArray));
     unsigned int hashLength = 0;
 
     if (mdctx == NULL || outputHash == NULL) {
         printf("Error: Could not create digest context or allocate memory for output hash\n");
-        if (mdctx) EVP_MD_CTX_free(mdctx);  // Cleanup if context was allocated
-        if (outputHash) free(outputHash);   // Cleanup allocated memory if allocated
+        if (mdctx) EVP_MD_CTX_free(mdctx); 
+        if (outputHash) free(outputHash); 
         return NULL;
     }
 
-    // Initialize the digest context for SHA-256
+    // initialize the digest context for SHA-256
     if (EVP_DigestInit_ex(mdctx, md, NULL) != 1) {
         printf("Error: Could not initialize digest\n");
         EVP_MD_CTX_free(mdctx);
@@ -286,7 +285,7 @@ RawByteArray *computeSHA256Hash(const RawByteArray *message) {
         return NULL;
     }
 
-    // Add the input message to be hashed
+    // add the input message to be hashed
     if (EVP_DigestUpdate(mdctx, message->data, message->size) != 1) {
         printf("Error: Could not update digest\n");
         EVP_MD_CTX_free(mdctx);
@@ -294,7 +293,7 @@ RawByteArray *computeSHA256Hash(const RawByteArray *message) {
         return NULL;
     }
 
-    // Allocate memory for the hash output
+    // allocate memory for the hash output
     outputHash->data = (unsigned char *)malloc(EVP_MD_size(md));
     if (outputHash->data == NULL) {
         printf("Error: Could not allocate memory for output hash data\n");
@@ -303,22 +302,21 @@ RawByteArray *computeSHA256Hash(const RawByteArray *message) {
         return NULL;
     }
 
-    // Finalize the digest and store the result in outputHash->data
+    // finalize the digest and store the result in outputHash->data
     if (EVP_DigestFinal_ex(mdctx, outputHash->data, &hashLength) != 1) {
         printf("Error: Could not finalize digest\n");
-        free(outputHash->data);  // Clean up allocated memory in case of failure
+        free(outputHash->data);  
         free(outputHash);
         EVP_MD_CTX_free(mdctx);
         return NULL;
     }
 
-    // Set the size of the output hash
     outputHash->size = hashLength;
 
-    // Clean up
+    // clean up
     EVP_MD_CTX_free(mdctx);
 
-    return outputHash;  // Return the pointer to the RawByteArray containing the hash
+    return outputHash; 
 }
 
 int verifyServerSignature(ServerDHResponse *dhResponse, RawByteArray *message) {
@@ -326,28 +324,28 @@ int verifyServerSignature(ServerDHResponse *dhResponse, RawByteArray *message) {
     EVP_MD_CTX *mdctx = NULL;
     int ret = 0;
 
-    // Load the server's EDDSA public key from raw byte array (assuming it's Ed25519)
+    // load the server's EDDSA public key from raw byte array 
     serverPublicKey = EVP_PKEY_new_raw_public_key(EVP_PKEY_ED25519, NULL, dhResponse->publicKey, dhResponse->publicKeyLen);
     if (serverPublicKey == NULL) {
         printf("Error: Could not load server's public key\n");
         goto cleanup;
     }
 
-    // Check for Ed25519 key type
+    // check for Ed25519 key type
     int keyType = EVP_PKEY_base_id(serverPublicKey);
     if (keyType != EVP_PKEY_ED25519) {
         printf("Error: serverPublicKey is not of type Ed25519\n");
         goto cleanup;
     }
 
-    // Create a digest context for verifying the signature
+    // create a digest context for verifying the signature
     mdctx = EVP_MD_CTX_new();
     if (mdctx == NULL) {
         printf("Error: Could not create digest context\n");
         goto cleanup;
     }
 
-    // Initialize the verification operation for Ed25519 (no digest needed)
+    // initialize the verification operation for Ed25519
     if (EVP_DigestVerifyInit(mdctx, NULL, NULL, NULL, serverPublicKey) != 1) {
         printf("Error: Could not initialize digest verify operation\n");
         goto cleanup;
@@ -366,7 +364,7 @@ int verifyServerSignature(ServerDHResponse *dhResponse, RawByteArray *message) {
     memcpy(hashGlobal, hashedMessage -> data, hashGlobalLen);
     
 
-    // Perform the verification using the server's signature (Ed25519 doesn't use DigestUpdate)
+    // perform the verification using the server's signature (ed25519 doesn't use DigestUpdate)
     if (EVP_DigestVerify(mdctx, dhResponse->hostSigData, dhResponse->hostSigDataLen, hashedMessage -> data, hashedMessage -> size) == 1) {
         // printf("Server's signature verified successfully!\n");
         ret = 1;  // Signature is valid
@@ -484,12 +482,6 @@ RawByteArray *concatenateVerificationMessage(unsigned char *keyType, size_t keyT
     return messageAndSize;
 }
 
-/*
-To get the libraries to work, need to run the following command (on Ruben's arm mac with
-openssl installed via homebrew)
-gcc client.c -I/opt/homebrew/opt/openssl@3/include -L/opt/homebrew/opt/openssl@3/lib -lssl -lcrypto
-gcc <file name> -I<path to openssl install>/include -L<path to openssl install>/lib -lssl -lcrypto
-*/
 int sendDiffieHellmanExchange(int sock) {
     // generate keys using group 14's p and g
     BIGNUM *p, *g, *f = NULL;
@@ -735,22 +727,20 @@ RawByteArray *deriveKey(char letter) {
 // hard coded to encrypt using aes128-ctr
 // pass in 1 for encrypt, 0 for decrypt
 // remember to free struct and data
-// there is no easy way to get the updated IV out of the context, consider passing in 
-// the ctx so that it persists between function calls 
 RawByteArray *aes128EncryptDecrypt(EVP_CIPHER_CTX *ctx, RawByteArray *message, int encrypt) {
     int len = 0;
     RawByteArray *result = malloc(sizeof(RawByteArray));
     assert(result != NULL);
 
-    // Initialize result with length and data set to NULL (in case of an error)
+    // initialize result with length and data set to NULL (in case of an error)
     result -> data = NULL;
     result -> size = 0;
 
-    // Allocate memory for the ciphertext/plaintext (they are the same length for aes128ctr)
+    // allocate memory for the ciphertext/plaintext (they are the same length for aes128ctr)
     result -> data = malloc(message -> size);
     assert(result -> data != NULL);
 
-    // Choose the correct operation based on the 'encrypt' flag (1 for encryption, 0 for decryption)
+    // choose the correct operation based on the 'encrypt' flag (1 for encryption, 0 for decryption)
     if (encrypt) {
         EVP_EncryptUpdate(ctx, result->data, &len, message->data, message->size);
 
@@ -773,7 +763,7 @@ RawByteArray *computeHmacSha1(RawByteArray *integrityKey, RawByteArray *packet, 
     mac -> data = malloc(SHA1_DIGEST_LENGTH);
     mac -> size = SHA1_DIGEST_LENGTH;
 
-    // Copy the sequence number (4 bytes) and packet data into data buffer
+    // copy the sequence number (4 bytes) and packet data into data buffer
     sequenceNumber = htonl(sequenceNumber);
     memcpy(data, &sequenceNumber, 4);
     memcpy(data + 4, packet -> data, packet -> size);
@@ -785,7 +775,7 @@ RawByteArray *computeHmacSha1(RawByteArray *integrityKey, RawByteArray *packet, 
     // printf("\n");
     // printf("size of data: %zu\n", data_size);
 
-    // Compute HMAC-SHA1
+    // compute HMAC-SHA1
     HMAC(EVP_sha1(), integrityKey -> data, integrityKey -> size, data, data_size, mac -> data, &macSize);
     
     // delete macSize when not using this print out, its the only place its used
@@ -796,8 +786,8 @@ RawByteArray *computeHmacSha1(RawByteArray *integrityKey, RawByteArray *packet, 
 
 size_t writeAlgoList(unsigned char *buffer, const char *list) {
     uint32_t len = htonl(strlen(list));
-    memcpy(buffer, &len, sizeof(len));       // Write the length prefix
-    memcpy(buffer + sizeof(len), list, strlen(list));  // Write the name-list
+    memcpy(buffer, &len, sizeof(len)); 
+    memcpy(buffer + sizeof(len), list, strlen(list)); 
     return sizeof(len) + strlen(list);
 }
 
@@ -848,17 +838,18 @@ RawByteArray *constructKexPayload() {
         offset += writeAlgoList(buffer + offset, algorithms[k]);
     }
 
-    // Add boolean (first_kex_packet_follows)
+    // add boolean (first_kex_packet_follows)
     buffer[offset] = 0;
     offset += 1;
 
-    uint32_t reserved = htonl(0);  // Reserved field, set to 0
+    // reserved field, set to 0
+    uint32_t reserved = htonl(0);  
     buffer[offset] = reserved;
     offset += 4;
     
     RawByteArray *payload = malloc(sizeof(RawByteArray));
     payload -> data = malloc(offset);
-    memcpy(payload->data, buffer, offset); // need to do it this way, or memory leak ensues
+    memcpy(payload->data, buffer, offset);
     payload -> size = offset;
     
     return payload;
@@ -867,7 +858,7 @@ RawByteArray *constructKexPayload() {
 // should add error codes later
 int sendProtocol(int sock) {
     unsigned char buffer[BUFFER_SIZE];
-    memset(buffer, 0, BUFFER_SIZE);  // Clear the buffer
+    memset(buffer, 0, BUFFER_SIZE);  // clear the buffer
 
     // send client protocol to server
     char *protocol = "SSH-2.0-mySSH\r\n";
@@ -961,7 +952,7 @@ int sendKexInit (int sock) {
     }
     
     unsigned char buffer[BUFFER_SIZE*2];
-    memset(buffer, 0, BUFFER_SIZE*2);  // Clear the buffer
+    memset(buffer, 0, BUFFER_SIZE*2);  // clear the buffer
     
     // recv only returns the ssh payload it seems
     size_t bytesReceived = recv(sock, buffer, BUFFER_SIZE*2, 0);    
@@ -1193,7 +1184,7 @@ int sendUserAuthReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integrit
 int recvMsgVerifyMac(int sock, int bufferSize, RawByteArray *integrityKey, int seqNum, EVP_CIPHER_CTX *decryptCtx) {
     // prob want to use realloc later for dynamic size
     unsigned char serverResponse[bufferSize];
-    memset(serverResponse, 0, bufferSize);  // Clear the buffer    
+    memset(serverResponse, 0, bufferSize);  // clear the buffer    
 
     ssize_t bytesReceived = recv(sock, serverResponse, bufferSize, 0);
 
@@ -1259,17 +1250,16 @@ int recvMsgVerifyMac(int sock, int bufferSize, RawByteArray *integrityKey, int s
 }
 
 /*
-      byte      SSH_MSG_CHANNEL_REQUEST (98)
-      uint32    recipient channel
-      string    "exec"
-      boolean   want reply
-      string    command
+byte      SSH_MSG_CHANNEL_REQUEST (98)
+uint32    recipient channel
+string    "exec"
+boolean   want reply
+string    command
 */
 int sendChannelReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integrityKey, uint32_t seqNum) {
        
     const char exec[4] = "exec";
     
-    // hard coding the command to run, take in user input once working
     // const char command[6] = "whoami";
     char command[30];
     
@@ -1657,8 +1647,6 @@ int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
 
     EVP_EncryptInit_ex(encryptCtx, EVP_aes_128_ctr(), NULL, encKeyCtoS -> data, ivCtoS -> data);
     EVP_DecryptInit_ex(decryptCtx, EVP_aes_128_ctr(), NULL, encKeyStoC -> data, ivStoC -> data);
-    // below init is for checking that we are encrypting correctly
-    // EVP_DecryptInit_ex(decryptCtx, EVP_aes_128_ctr(), NULL, encKeyCtoS -> data, ivCtoS -> data);
     
     sendServiceReq(sock, encryptCtx, integrityKeyCtoS, *seqNum);
     if (!recvMsgVerifyMac(sock, BUFFER_SIZE, integrityKeyStoC, *seqNum, decryptCtx)) {
@@ -1704,7 +1692,6 @@ int sendReceiveEncryptedData(int sock, uint32_t *seqNum) {
         // exit(1);
     }
     *seqNum += 1;
-
 
     // cleanup
     free(encKeyCtoS -> data);
@@ -1754,8 +1741,7 @@ int startClient(const char *host, const int port) {
     sock = socket(AF_INET, SOCK_STREAM, 0);
 
     address.sin_family = AF_INET;
-    address.sin_port = htons(22); // THIS IS THE PORT THAT THE CLIENT CONNECTS TO
-    // inet_pton(AF_INET, "127.0.0.1", &address.sin_addr); // this is the host address to connect to
+    address.sin_port = htons(port);
     inet_pton(AF_INET, host, &address.sin_addr);
 
     int output = connect(sock, (struct sockaddr *)&address, sizeof(address));
