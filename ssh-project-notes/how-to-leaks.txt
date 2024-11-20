@@ -1,0 +1,4 @@
+Very brief explanation of how to use the Mac leaks command to check 
+our code for memory leaks.
+
+leaks -atExit -- ./client 192.168.64.6 22
