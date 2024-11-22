@@ -15,7 +15,6 @@
 // openssl libraries (for encryption/auth)
 #include <openssl/hmac.h>
 
-// IDK WHAT SIZE BUFFER MAKES SENSE, LAWSUS USES 1024 A LOT, SO USING THAT FOR NOW
 #define BUFFER_SIZE 1024
 #define SSH_MSG_KEXINIT 20
 #define SSH_MSG_KEXDH_INIT 30
@@ -264,54 +263,23 @@ RawByteArray* addTwosComplementBit(const unsigned char* pubKey, int pubKeyLen) {
 }
 
 // Function to compute the SHA-256 hash of a message and return it as a pointer to RawByteArray
-// this function actually has error checking, that's because we got stuck here, so we
-// spent the time to add it to help with debugging
 RawByteArray *computeSHA256Hash(const RawByteArray *message) {
     EVP_MD_CTX *mdctx = EVP_MD_CTX_new(); 
     const EVP_MD *md = EVP_sha256(); 
     RawByteArray *outputHash = malloc(sizeof(RawByteArray));
     unsigned int hashLength = 0;
 
-    if (mdctx == NULL || outputHash == NULL) {
-        printf("Error: Could not create digest context or allocate memory for output hash\n");
-        if (mdctx) EVP_MD_CTX_free(mdctx); 
-        if (outputHash) free(outputHash); 
-        return NULL;
-    }
-
     // initialize the digest context for SHA-256
-    if (EVP_DigestInit_ex(mdctx, md, NULL) != 1) {
-        printf("Error: Could not initialize digest\n");
-        EVP_MD_CTX_free(mdctx);
-        free(outputHash);
-        return NULL;
-    }
+    EVP_DigestInit_ex(mdctx, md, NULL);
 
     // add the input message to be hashed
-    if (EVP_DigestUpdate(mdctx, message->data, message->size) != 1) {
-        printf("Error: Could not update digest\n");
-        EVP_MD_CTX_free(mdctx);
-        free(outputHash);
-        return NULL;
-    }
+    EVP_DigestUpdate(mdctx, message->data, message->size);
 
     // allocate memory for the hash output
     outputHash->data = (unsigned char *)malloc(EVP_MD_size(md));
-    if (outputHash->data == NULL) {
-        printf("Error: Could not allocate memory for output hash data\n");
-        EVP_MD_CTX_free(mdctx);
-        free(outputHash);
-        return NULL;
-    }
 
     // finalize the digest and store the result in outputHash->data
-    if (EVP_DigestFinal_ex(mdctx, outputHash->data, &hashLength) != 1) {
-        printf("Error: Could not finalize digest\n");
-        free(outputHash->data);  
-        free(outputHash);
-        EVP_MD_CTX_free(mdctx);
-        return NULL;
-    }
+    EVP_DigestFinal_ex(mdctx, outputHash->data, &hashLength);
 
     outputHash->size = hashLength;
 
@@ -321,8 +289,6 @@ RawByteArray *computeSHA256Hash(const RawByteArray *message) {
     return outputHash; 
 }
 
-// this function actually has error checking, that's because we got stuck here, 
-// so we spent the time to add it to help with debugging
 int verifyServerSignature(ServerDHResponse *dhResponse, RawByteArray *message) {
     EVP_PKEY *serverPublicKey = NULL;
     EVP_MD_CTX *mdctx = NULL;
@@ -330,30 +296,15 @@ int verifyServerSignature(ServerDHResponse *dhResponse, RawByteArray *message) {
 
     // load the server's EDDSA public key from raw byte array 
     serverPublicKey = EVP_PKEY_new_raw_public_key(EVP_PKEY_ED25519, NULL, dhResponse->publicKey, dhResponse->publicKeyLen);
-    if (serverPublicKey == NULL) {
-        printf("Error: Could not load server's public key\n");
-        goto cleanup;
-    }
 
     // check for ed25519 key type
-    int keyType = EVP_PKEY_base_id(serverPublicKey);
-    if (keyType != EVP_PKEY_ED25519) {
-        printf("Error: serverPublicKey is not of type Ed25519\n");
-        goto cleanup;
-    }
+    EVP_PKEY_base_id(serverPublicKey);
 
     // create a digest context for verifying the signature
     mdctx = EVP_MD_CTX_new();
-    if (mdctx == NULL) {
-        printf("Error: Could not create digest context\n");
-        goto cleanup;
-    }
 
     // initialize the verification operation for ed25519
-    if (EVP_DigestVerifyInit(mdctx, NULL, NULL, NULL, serverPublicKey) != 1) {
-        printf("Error: Could not initialize digest verify operation\n");
-        goto cleanup;
-    }
+    EVP_DigestVerifyInit(mdctx, NULL, NULL, NULL, serverPublicKey);
 
     RawByteArray *hashedMessage = computeSHA256Hash(message);
     // printf("HASHED MESSAGE:\n");
@@ -380,9 +331,8 @@ int verifyServerSignature(ServerDHResponse *dhResponse, RawByteArray *message) {
     free(hashedMessage -> data);
     free(hashedMessage);
 
-cleanup:
-    if (mdctx) EVP_MD_CTX_free(mdctx);
-    if (serverPublicKey) EVP_PKEY_free(serverPublicKey);
+    EVP_MD_CTX_free(mdctx);
+    EVP_PKEY_free(serverPublicKey);
 
     return ret;
 }
