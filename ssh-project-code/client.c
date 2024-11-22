@@ -597,15 +597,12 @@ int sendDiffieHellmanExchange(int sock) {
         exit(1);
     }
 
-    // cleanup - NOT CONFIDENT THAT WE ARE FREEING EVERYTHING CORRECTLY
-    // BN_free(p);
-    // BN_free(g);
+    // cleanup
     DH_free(dh);
     free(eBytes);
     free(e -> data);
     free(e);
     free(buffer);
-    // free(payload -> data);
     free(payload);
     free(packet -> data);
     free(packet);
