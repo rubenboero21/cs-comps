@@ -213,6 +213,9 @@ Input encryptCtx: pointer to an OpenSSL encryption context (used to encrypt plai
 Input integrityKey: the integrity key, used to compute MAC
 Input seqNum: the sequence number, used in computing MAC
 Returns: SOME ERROR CODES - NEED TO UPDATE
+Note, the encryptCtx stores the counter/IV that is used for each encrypt, thus, 
+the encryptCtx passed into this function must also be passed into all other functions
+that carry out encryption 
 */
 int sendServiceReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integrityKey, uint32_t seqNum);
 
@@ -222,6 +225,9 @@ Input encryptCtx: pointer to an OpenSSL encryption context (used to encrypt plai
 Input integrityKey: the integrity key, used to compute MAC
 Input seqNum: the sequence number, used in computing MAC
 Returns: SOME ERROR CODES - NEED TO UPDATE
+Note, the encryptCtx stores the counter/IV that is used for each encrypt, thus, 
+the encryptCtx passed into this function must also be passed into all other functions
+that carry out encryption 
 */
 int sendUserAuthReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integrityKey, uint32_t seqNum);
 
@@ -239,6 +245,9 @@ Input integrityKey: the integrity key, used to compute MAC
 Input seqNum: the sequence number, used in computing MAC
 Input decryptCtx: pointer to an OpenSSL decryption context (used to decrypt ciphertext)
 Returns: 1 if MAC is valid, 0 if MAC is not valid
+Note, the decryptCtx stores the counter/IV that is used for each decrypt, thus, 
+the decryptCtx passed into this function must also be passed into all other functions
+that carry out decryption 
 */
 int recvMsgVerifyMac(int sock, int bufferSize, RawByteArray *integrityKey, int seqNum, EVP_CIPHER_CTX *decryptCtx);
 
@@ -248,6 +257,9 @@ Input encryptCtx: pointer to an OpenSSL encryption context (used to encrypt plai
 Input integrityKey: the integrity key, used to compute MAC
 Input seqNum: the sequence number, used in computing MAC
 Returns: SOME ERROR CODES - NEED TO UPDATE
+Note, the encryptCtx stores the counter/IV that is used for each encrypt, thus, 
+the encryptCtx passed into this function must also be passed into all other functions
+that carry out encryption 
 */
 int sendChannelOpenReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integrityKey, uint32_t seqNum);
 
@@ -257,6 +269,9 @@ Input encryptCtx: pointer to an OpenSSL encryption context (used to encrypt plai
 Input integrityKey: the integrity key, used to compute MAC
 Input seqNum: the sequence number, used in computing MAC
 Returns: SOME ERROR CODES - NEED TO UPDATE
+Note, the encryptCtx stores the counter/IV that is used for each encrypt, thus, 
+the encryptCtx passed into this function must also be passed into all other functions
+that carry out encryption 
 */
 int sendChannelReq(int sock, EVP_CIPHER_CTX *encryptCtx, RawByteArray *integrityKey, uint32_t seqNum);
 
@@ -270,6 +285,9 @@ Returns: SOME ERROR CODES - NEED TO UPDATE
 This function is hard coded to receive only the window adjust and channel success message
 and verify the corresponding MACs. This function will be obselete once we implement
 a dynamic solution to reading server responses
+Note, the decryptCtx stores the counter/IV that is used for each decrypt, thus, 
+the decryptCtx passed into this function must also be passed into all other functions
+that carry out decryption 
 */
 int recvWinAdjChanSuccVerifyMac(int sock, int bufferSize, RawByteArray *integrityKey, int seqNum, EVP_CIPHER_CTX *decryptCtx);
 
@@ -283,5 +301,8 @@ Returns: 1 if both MACs are valid, 0 otherwise
 This function dynamically reads the server response, but only for the channel data 
 message. This function will also be obselete once we implement a dynamic solution to
 reading server responses
+Note, the decryptCtx stores the counter/IV that is used for each decrypt, thus, 
+the decryptCtx passed into this function must also be passed into all other functions
+that carry out decryption 
 */
 int recvChanDataVerifyMac(int sock, int bufferSize, RawByteArray *integrityKey, int seqNum, EVP_CIPHER_CTX *decryptCtx);
